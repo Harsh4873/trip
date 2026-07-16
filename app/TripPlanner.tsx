@@ -55,11 +55,11 @@ const BOARD_PATH = ["tripBoards", "new-mexico-2026"] as const;
 const TRIP_START = new Date("2026-08-08T00:00:00-05:00").getTime();
 const DAY_MS = 86_400_000;
 
-const tabs: { id: TabId; label: string; icon: typeof CalendarDays }[] = [
-  { id: "plan", label: "Schedule", icon: CalendarDays },
-  { id: "explore", label: "Food & attractions", icon: MapPinned },
-  { id: "checklist", label: "Checklist", icon: ListChecks },
-  { id: "info", label: "Trip info", icon: Route },
+const tabs: { id: TabId; label: string; shortLabel: string; icon: typeof CalendarDays }[] = [
+  { id: "plan", label: "Schedule", shortLabel: "Schedule", icon: CalendarDays },
+  { id: "explore", label: "Food & attractions", shortLabel: "Food & sights", icon: MapPinned },
+  { id: "checklist", label: "Checklist", shortLabel: "Checklist", icon: ListChecks },
+  { id: "info", label: "Trip info", shortLabel: "Trip info", icon: Route },
 ];
 
 function cleanSharedState(value: unknown): SharedTripState {
@@ -207,6 +207,17 @@ export default function TripPlanner() {
   const stateRef = useRef(shared);
   const boardRef = useRef<DocumentReference<DocumentData> | null>(null);
   const lastRemoteKey = useRef("");
+  const dayPickerRef = useRef<HTMLDivElement | null>(null);
+
+  // Keep the selected day chip visible in the scrollable picker (phones).
+  useEffect(() => {
+    const container = dayPickerRef.current;
+    if (!container || container.scrollWidth <= container.clientWidth) return;
+    const active = container.querySelector<HTMLButtonElement>("button.active");
+    if (!active) return;
+    const target = active.offsetLeft - (container.clientWidth - active.offsetWidth) / 2;
+    container.scrollTo({ left: Math.max(0, target), behavior: "smooth" });
+  }, [selectedDay]);
 
   useEffect(() => {
     let localState = EMPTY_STATE;
@@ -429,7 +440,7 @@ export default function TripPlanner() {
         <dl className="overview-stats">
           <div>
             <dt>Driving</dt>
-            <dd>1,952 mi · 30 h 11 m</dd>
+            <dd>1,952 mi · 30h 11m</dd>
           </div>
           <div>
             <dt>Nights</dt>
@@ -462,7 +473,8 @@ export default function TripPlanner() {
                 onClick={() => setActiveTab(tab.id)}
               >
                 <Icon aria-hidden="true" />
-                {tab.label}
+                <span className="tab-label-long">{tab.label}</span>
+                <span className="tab-label-short">{tab.shortLabel}</span>
               </button>
             );
           })}
@@ -480,7 +492,7 @@ export default function TripPlanner() {
               </p>
             </div>
 
-            <div className="day-picker" aria-label="Choose trip day">
+            <div className="day-picker" aria-label="Choose trip day" ref={dayPickerRef}>
               {tripDays.map((day, index) => (
                 <button
                   type="button"
