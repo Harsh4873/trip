@@ -17,6 +17,22 @@ test("contains the fixed trip facts and researched corrections", async () => {
   assert.match(data, /beans, rice, and chile/);
 });
 
+test("keeps the food + attraction directory aligned with the trip's constraints", async () => {
+  const data = await readFile(new URL("app/trip-data.ts", root), "utf8");
+
+  // Both categories exist in the lookup directory.
+  assert.match(data, /category: "attraction"/);
+  assert.match(data, /category: "food"/);
+  // Date-rigid closures stay visible as explicit constraints.
+  assert.match(data, /Harwood Museum of Art/);
+  assert.match(data, /Closed Monday and Tuesday/);
+  assert.match(data, /Closed Tuesday and Wednesday, so Thursday is the only day that works/);
+  assert.match(data, /2026 season ends August 1/);
+  // Both route-dependent home-leg Indian stops are in the directory.
+  assert.match(data, /Spicy India/);
+  assert.match(data, /Masala & Curry/);
+});
+
 test("keeps the site standalone and Pages-safe", async () => {
   const [config, workflow, layout, page, packageJson] = await Promise.all([
     readFile(new URL("next.config.ts", root), "utf8"),

@@ -1,4 +1,4 @@
-# New Mexico Roadbook
+# New Mexico Road Trip
 
 A temporary, standalone trip planner for August 8–15, 2026. It is intentionally separate from the portfolio and deploys as the independent `trip` GitHub Pages project at `https://harsh.bet/trip/`.
 
@@ -7,7 +7,8 @@ A temporary, standalone trip planner for August 8–15, 2026. It is intentionall
 - the fixed dates, destinations, mileage, drive times, and lodging sequence from the original plan
 - a researched daily schedule with realistic stop, meal, check-in, rest, and weather buffers
 - vegetarian-only food guidance with an Indian-first focus
-- day tabs, cuisine filters, trip-mode choices, progress tracking, custom to-dos, fuel math, route options, and live-condition links
+- a single food + attraction directory searchable and filterable by place and trip day, with date-rigid closures (Harwood, Nambé Falls, the TEXAS musical, the Bandelier shuttle) called out on the affected entries
+- shared checklists with custom to-dos, trip-mode choices for Aug 13, fuel math, home-route meal options, and live-condition links
 - Firestore synchronization with browser/offline caching
 - `noindex` metadata because the site contains a future personal travel schedule
 
