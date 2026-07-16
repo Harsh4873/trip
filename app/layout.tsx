@@ -3,9 +3,9 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://harsh.bet"),
-  title: "New Mexico Roadbook · Aug 8–15, 2026",
+  title: "New Mexico Road Trip · Aug 8–15, 2026",
   description:
-    "A researched, day-by-day roadbook for Taos, Santa Fe, Albuquerque, and Palo Duro—with vegetarian food, realistic drive pacing, and shared checklists.",
+    "Day-by-day schedule, a vegetarian food and attraction lookup, and shared checklists for the Aug 8–15, 2026 drive through Taos, Santa Fe, Albuquerque, and Palo Duro.",
   alternates: {
     canonical: "/trip/",
   },
@@ -20,10 +20,10 @@ export const metadata: Metadata = {
     },
   },
   openGraph: {
-    title: "New Mexico Roadbook · 2026",
+    title: "New Mexico Road Trip · 2026",
     description: "Eight days across Taos, Santa Fe, Albuquerque, and Palo Duro.",
     url: "https://harsh.bet/trip/",
-    siteName: "New Mexico Roadbook",
+    siteName: "New Mexico Road Trip",
     type: "website",
   },
 };
