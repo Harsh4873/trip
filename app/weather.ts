@@ -2,14 +2,14 @@
 // The site stays fully static: forecasts are fetched in the browser and cached
 // in localStorage so travel-morning reloads work on weak cell signal.
 
-export type DailyForecast = {
+type DailyForecast = {
   date: string; // ISO "2026-08-08"
-  weatherCode: number;
+  weatherCode: number | null;
   highF: number;
   lowF: number;
-  precipChance: number; // %
-  uvIndex: number;
-  windMph: number;
+  precipChance: number | null; // %; null = model gave no probability
+  uvIndex: number | null;
+  windMph: number | null;
 };
 
 export type StopForecast = {
@@ -38,36 +38,60 @@ export function describeWeatherCode(code: number): { label: string; group: "clea
   return { label: "Mixed", group: "cloud" };
 }
 
-type CacheShape = Record<string, StopForecast>;
-
-function readCache(): CacheShape {
+// Shared fetch-through-localStorage pattern for both forecasts and alerts:
+// serve cached entries inside their TTL, refetch the stale ones, persist
+// best-effort. Failures leave the previous cache entry in place.
+async function loadCachedPerStop<S extends { id: string }, T extends { stopId: string; fetchedAt: number }>(
+  cacheKey: string,
+  ttlMs: number,
+  stops: S[],
+  fetchOne: (stop: S) => Promise<T | null>,
+): Promise<Record<string, T>> {
+  let cache: Record<string, T> = {};
   try {
-    const raw = window.localStorage.getItem(CACHE_KEY);
-    if (!raw) return {};
-    const parsed = JSON.parse(raw) as CacheShape;
-    return parsed && typeof parsed === "object" ? parsed : {};
+    const raw = window.localStorage.getItem(cacheKey);
+    if (raw) {
+      const parsed = JSON.parse(raw) as Record<string, T>;
+      if (parsed && typeof parsed === "object") cache = parsed;
+    }
   } catch {
-    return {};
+    // Start from an empty cache when storage is unavailable or corrupt.
   }
-}
 
-function writeCache(cache: CacheShape) {
-  try {
-    window.localStorage.setItem(CACHE_KEY, JSON.stringify(cache));
-  } catch {
-    // Cache is best-effort only.
+  const now = Date.now();
+  const stale = stops.filter((stop) => {
+    const cached = cache[stop.id];
+    return !cached || now - cached.fetchedAt > ttlMs;
+  });
+
+  if (stale.length > 0) {
+    const fresh = await Promise.all(stale.map(fetchOne));
+    for (const item of fresh) {
+      if (item) cache[item.stopId] = item;
+    }
+    try {
+      window.localStorage.setItem(cacheKey, JSON.stringify(cache));
+    } catch {
+      // Cache is best-effort only.
+    }
   }
+
+  return cache;
 }
 
 type OpenMeteoDaily = {
   time: string[];
-  weather_code: number[];
-  temperature_2m_max: number[];
-  temperature_2m_min: number[];
-  precipitation_probability_max: (number | null)[];
-  uv_index_max: (number | null)[];
-  wind_speed_10m_max: (number | null)[];
+  weather_code?: (number | null)[];
+  temperature_2m_max?: (number | null)[];
+  temperature_2m_min?: (number | null)[];
+  precipitation_probability_max?: (number | null)[];
+  uv_index_max?: (number | null)[];
+  wind_speed_10m_max?: (number | null)[];
 };
+
+function roundOrNull(value: number | null | undefined): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? Math.round(value) : null;
+}
 
 async function fetchStopForecast(stopId: string, lat: number, lon: number, timezone: string): Promise<StopForecast | null> {
   const params = new URLSearchParams({
@@ -97,15 +121,24 @@ async function fetchStopForecast(stopId: string, lat: number, lon: number, timez
     return {
       stopId,
       fetchedAt: Date.now(),
-      days: daily.time.map((date, index) => ({
-        date,
-        weatherCode: daily.weather_code[index] ?? 3,
-        highF: Math.round(daily.temperature_2m_max[index] ?? 0),
-        lowF: Math.round(daily.temperature_2m_min[index] ?? 0),
-        precipChance: Math.round(daily.precipitation_probability_max[index] ?? 0),
-        uvIndex: Math.round(daily.uv_index_max[index] ?? 0),
-        windMph: Math.round(daily.wind_speed_10m_max[index] ?? 0),
-      })),
+      // A day without both temperatures is no forecast at all—dropping it lets
+      // the UI fall back to normals instead of rendering a confident 0°/0°.
+      days: daily.time.flatMap((date, index) => {
+        const highF = roundOrNull(daily.temperature_2m_max?.[index]);
+        const lowF = roundOrNull(daily.temperature_2m_min?.[index]);
+        if (highF === null || lowF === null) return [];
+        return [
+          {
+            date,
+            weatherCode: roundOrNull(daily.weather_code?.[index]),
+            highF,
+            lowF,
+            precipChance: roundOrNull(daily.precipitation_probability_max?.[index]),
+            uvIndex: roundOrNull(daily.uv_index_max?.[index]),
+            windMph: roundOrNull(daily.wind_speed_10m_max?.[index]),
+          },
+        ];
+      }),
     };
   } catch {
     return null;
@@ -115,31 +148,16 @@ async function fetchStopForecast(stopId: string, lat: number, lon: number, timez
 export async function loadForecasts(
   stops: { id: string; lat: number; lon: number; timezone: string }[],
 ): Promise<Record<string, StopForecast>> {
-  const cache = readCache();
-  const now = Date.now();
-  const stale = stops.filter((stop) => {
-    const cached = cache[stop.id];
-    return !cached || now - cached.fetchedAt > CACHE_TTL_MS;
-  });
-
-  if (stale.length > 0) {
-    const fresh = await Promise.all(
-      stale.map((stop) => fetchStopForecast(stop.id, stop.lat, stop.lon, stop.timezone)),
-    );
-    for (const forecast of fresh) {
-      if (forecast) cache[forecast.stopId] = forecast;
-    }
-    writeCache(cache);
-  }
-
-  return cache;
+  return loadCachedPerStop(CACHE_KEY, CACHE_TTL_MS, stops, (stop) =>
+    fetchStopForecast(stop.id, stop.lat, stop.lon, stop.timezone),
+  );
 }
 
 // Official NWS watches/warnings per stop (api.weather.gov: free, keyless,
 // CORS-enabled). During monsoon season this is the feed that carries flash
 // flood watches and heat advisories.
 
-export type StopAlert = {
+type StopAlert = {
   id: string;
   event: string;
   headline: string;
@@ -154,19 +172,6 @@ export type StopAlerts = {
 
 const ALERTS_CACHE_KEY = "harsh-trip-2026-alerts-v1";
 const ALERTS_TTL_MS = 15 * 60 * 1000;
-
-type AlertsCache = Record<string, StopAlerts>;
-
-function readAlertsCache(): AlertsCache {
-  try {
-    const raw = window.localStorage.getItem(ALERTS_CACHE_KEY);
-    if (!raw) return {};
-    const parsed = JSON.parse(raw) as AlertsCache;
-    return parsed && typeof parsed === "object" ? parsed : {};
-  } catch {
-    return {};
-  }
-}
 
 type NwsAlertFeature = {
   properties?: {
@@ -208,26 +213,7 @@ async function fetchStopAlerts(stopId: string, lat: number, lon: number): Promis
 export async function loadAlerts(
   stops: { id: string; lat: number; lon: number }[],
 ): Promise<Record<string, StopAlerts>> {
-  const cache = readAlertsCache();
-  const now = Date.now();
-  const stale = stops.filter((stop) => {
-    const cached = cache[stop.id];
-    return !cached || now - cached.fetchedAt > ALERTS_TTL_MS;
-  });
-
-  if (stale.length > 0) {
-    const fresh = await Promise.all(
-      stale.map((stop) => fetchStopAlerts(stop.id, stop.lat, stop.lon)),
-    );
-    for (const alerts of fresh) {
-      if (alerts) cache[alerts.stopId] = alerts;
-    }
-    try {
-      window.localStorage.setItem(ALERTS_CACHE_KEY, JSON.stringify(cache));
-    } catch {
-      // Cache is best-effort only.
-    }
-  }
-
-  return cache;
+  return loadCachedPerStop(ALERTS_CACHE_KEY, ALERTS_TTL_MS, stops, (stop) =>
+    fetchStopAlerts(stop.id, stop.lat, stop.lon),
+  );
 }

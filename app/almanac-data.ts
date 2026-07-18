@@ -14,7 +14,6 @@ export type StopAlmanac = {
   lon: number;
   elevationFt: number;
   timezone: string; // IANA, for the forecast API
-  tripDates: string[]; // ISO dates this stop hosts
   augHighF: number;
   augLowF: number;
   augPrecipIn: number;
@@ -33,7 +32,6 @@ export const stopAlmanacs: StopAlmanac[] = [
     lon: -101.8552,
     elevationFt: 3202,
     timezone: "America/Chicago",
-    tripDates: ["2026-08-08"],
     augHighF: 92,
     augLowF: 68,
     augPrecipIn: 1.74,
@@ -52,7 +50,6 @@ export const stopAlmanacs: StopAlmanac[] = [
     lon: -105.5734,
     elevationFt: 6969,
     timezone: "America/Denver",
-    tripDates: ["2026-08-09", "2026-08-10"],
     augHighF: 84,
     augLowF: 51,
     augPrecipIn: 1.77,
@@ -71,7 +68,6 @@ export const stopAlmanacs: StopAlmanac[] = [
     lon: -105.9378,
     elevationFt: 7199,
     timezone: "America/Denver",
-    tripDates: ["2026-08-11", "2026-08-12"],
     augHighF: 86,
     augLowF: 56,
     augPrecipIn: 1.96,
@@ -90,7 +86,6 @@ export const stopAlmanacs: StopAlmanac[] = [
     lon: -106.6504,
     elevationFt: 5312,
     timezone: "America/Denver",
-    tripDates: ["2026-08-13"],
     augHighF: 89,
     augLowF: 65,
     augPrecipIn: 1.31,
@@ -109,7 +104,6 @@ export const stopAlmanacs: StopAlmanac[] = [
     lon: -101.6595,
     elevationFt: 2844,
     timezone: "America/Chicago",
-    tripDates: ["2026-08-14", "2026-08-15"],
     augHighF: 97,
     augLowF: 66,
     augPrecipIn: 2.5,
@@ -128,8 +122,9 @@ export type DayAlmanac = {
   date: string; // ISO date for forecast lookup
   sunrise: string;
   sunset?: string;
-  highF?: number;
-  lowF?: number;
+  // Typical temps come from the stop's normals; enRoute marks the drive-home
+  // day, where the departure stop's numbers don't describe the day.
+  enRoute?: boolean;
   stormWindow?: string;
 };
 
@@ -140,8 +135,6 @@ export const dayAlmanacs: DayAlmanac[] = [
     date: "2026-08-08",
     sunrise: "7:05 AM CDT",
     sunset: "8:41 PM",
-    highF: 92,
-    lowF: 68,
     stormWindow: "Storms unlikely; if any, 4–10 PM",
   },
   {
@@ -150,8 +143,6 @@ export const dayAlmanacs: DayAlmanac[] = [
     date: "2026-08-09",
     sunrise: "7:06 AM CDT",
     sunset: "8:00 PM MDT",
-    highF: 84,
-    lowF: 51,
     stormWindow: "Taos storms 2–6 PM",
   },
   {
@@ -160,8 +151,6 @@ export const dayAlmanacs: DayAlmanac[] = [
     date: "2026-08-10",
     sunrise: "6:16 AM",
     sunset: "7:58 PM",
-    highF: 84,
-    lowF: 51,
     stormWindow: "Gorge + Pueblo before noon; storms 2–6 PM",
   },
   {
@@ -170,8 +159,6 @@ export const dayAlmanacs: DayAlmanac[] = [
     date: "2026-08-11",
     sunrise: "6:17 AM",
     sunset: "7:58 PM",
-    highF: 86,
-    lowF: 56,
     stormWindow: "Valley storms 2–7 PM",
   },
   {
@@ -180,8 +167,6 @@ export const dayAlmanacs: DayAlmanac[] = [
     date: "2026-08-12",
     sunrise: "6:21 AM",
     sunset: "7:56 PM",
-    highF: 86,
-    lowF: 56,
     stormWindow: "Bandelier in the morning; storms 2–7 PM",
   },
   {
@@ -190,8 +175,6 @@ export const dayAlmanacs: DayAlmanac[] = [
     date: "2026-08-13",
     sunrise: "6:21 AM",
     sunset: "7:57 PM",
-    highF: 89,
-    lowF: 65,
     stormWindow: "Scattered cells late afternoon",
   },
   {
@@ -200,8 +183,6 @@ export const dayAlmanacs: DayAlmanac[] = [
     date: "2026-08-14",
     sunrise: "6:26 AM MDT",
     sunset: "8:36 PM CDT",
-    highF: 97,
-    lowF: 66,
     stormWindow: "Canyon heat peaks 12–6 PM; storms 4–10 PM",
   },
   {
@@ -209,9 +190,17 @@ export const dayAlmanacs: DayAlmanac[] = [
     stopId: "palo-duro",
     date: "2026-08-15",
     sunrise: "7:07 AM CDT",
+    enRoute: true,
     stormWindow: "Check DriveTexas at each fuel stop",
   },
 ];
+
+// Which ISO dates each stop hosts, derived from the day table so the
+// stop cards and the schedule can never disagree.
+export const stopTripDates: Record<string, string[]> = {};
+for (const day of dayAlmanacs) {
+  (stopTripDates[day.stopId] ??= []).push(day.date);
+}
 
 export type MoonNight = {
   date: string; // ISO

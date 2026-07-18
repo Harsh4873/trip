@@ -1,22 +1,22 @@
-// Stylized-but-geographic route map. Stops are projected from real
-// coordinates (equirectangular, cos-corrected) so relative positions and
-// distances read honestly; borders are simplified straight-line segments.
+// Stylized-but-geographic route map. Stop coordinates and dates come from
+// the almanac (single source of truth); this file adds only presentation:
+// projection, labels, borders, and route curves. The equirectangular
+// projection is cos-corrected so relative positions read honestly.
 
-type MapStop = {
+import { stopAlmanacs } from "./almanac-data";
+
+type StopView = {
   id: string;
   label: string;
-  sub: string;
-  lat: number;
-  lon: number;
   labelSide: "left" | "right";
 };
 
-const stops: MapStop[] = [
-  { id: "lubbock", label: "Lubbock", sub: "Aug 8", lat: 33.5779, lon: -101.8552, labelSide: "right" },
-  { id: "taos", label: "Taos", sub: "Aug 9–10", lat: 36.4072, lon: -105.5734, labelSide: "right" },
-  { id: "santa-fe", label: "Santa Fe", sub: "Aug 11–12", lat: 35.687, lon: -105.9378, labelSide: "right" },
-  { id: "abq", label: "Albuquerque", sub: "Aug 13", lat: 35.0844, lon: -106.6504, labelSide: "left" },
-  { id: "palo-duro", label: "Palo Duro", sub: "Aug 14", lat: 34.9375, lon: -101.6595, labelSide: "right" },
+const stopViews: StopView[] = [
+  { id: "lubbock", label: "Lubbock", labelSide: "right" },
+  { id: "taos", label: "Taos", labelSide: "right" },
+  { id: "santa-fe", label: "Santa Fe", labelSide: "right" },
+  { id: "albuquerque", label: "Albuquerque", labelSide: "left" },
+  { id: "palo-duro", label: "Palo Duro", labelSide: "right" },
 ];
 
 const amarillo = { lat: 35.222, lon: -101.8313 };
@@ -25,10 +25,22 @@ function project(lon: number, lat: number) {
   return { x: (lon + 109.7) * 60, y: (37.35 - lat) * 73 };
 }
 
-const P = Object.fromEntries(stops.map((stop) => [stop.id, project(stop.lon, stop.lat)]));
+const stops = stopViews.flatMap((view) => {
+  const almanac = stopAlmanacs.find((stop) => stop.id === view.id);
+  if (!almanac) return [];
+  return [
+    {
+      ...view,
+      sub: almanac.nights.replace(/^Night of /, ""),
+      point: project(almanac.lon, almanac.lat),
+    },
+  ];
+});
+
+const P = Object.fromEntries(stops.map((stop) => [stop.id, stop.point]));
 const AMA = project(amarillo.lon, amarillo.lat);
 
-export default function RouteMap({ currentStop = null }: { currentStop?: number | null }) {
+export default function RouteMap({ currentStopId = null }: { currentStopId?: string | null }) {
   return (
     <svg
       className="route-map"
@@ -61,8 +73,8 @@ export default function RouteMap({ currentStop = null }: { currentStop?: number 
       <g className="map-route">
         <path d={`M ${P.lubbock.x} ${P.lubbock.y} Q 330 160 ${P.taos.x} ${P.taos.y}`} />
         <path d={`M ${P.taos.x} ${P.taos.y} Q 240 95 ${P["santa-fe"].x} ${P["santa-fe"].y}`} />
-        <path d={`M ${P["santa-fe"].x} ${P["santa-fe"].y} L ${P.abq.x} ${P.abq.y}`} />
-        <path d={`M ${P.abq.x} ${P.abq.y} Q 320 148 ${AMA.x} ${AMA.y} L ${P["palo-duro"].x} ${P["palo-duro"].y}`} />
+        <path d={`M ${P["santa-fe"].x} ${P["santa-fe"].y} L ${P.albuquerque.x} ${P.albuquerque.y}`} />
+        <path d={`M ${P.albuquerque.x} ${P.albuquerque.y} Q 320 148 ${AMA.x} ${AMA.y} L ${P["palo-duro"].x} ${P["palo-duro"].y}`} />
       </g>
 
       {/* Amarillo waypoint (lunch + takeout stop) */}
@@ -75,10 +87,10 @@ export default function RouteMap({ currentStop = null }: { currentStop?: number 
 
       {/* Numbered stops */}
       {stops.map((stop, index) => {
-        const point = P[stop.id];
+        const { point } = stop;
         const anchor = stop.labelSide === "right" ? "start" : "end";
         const dx = stop.labelSide === "right" ? 18 : -18;
-        const isCurrent = currentStop === index;
+        const isCurrent = currentStopId === stop.id;
         return (
           <g className={`map-stop${isCurrent ? " is-current" : ""}`} key={stop.id}>
             {isCurrent && <circle className="map-stop-ring" cx={point.x} cy={point.y} r="17" />}

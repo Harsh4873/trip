@@ -63,6 +63,7 @@ import {
   moonNights,
   perseids,
   stopAlmanacs,
+  stopTripDates,
 } from "./almanac-data";
 import {
   describeWeatherCode,
@@ -76,13 +77,17 @@ type TabId = "plan" | "explore" | "weather" | "checklist" | "info";
 type SyncStatus = "connecting" | "saving" | "synced" | "offline";
 type CustomTodo = { id: string; text: string };
 type SharedTripState = { checked: string[]; customTodos: CustomTodo[] };
-type TripClock = { daysUntil: number; dayIndex: number };
+type TripClock = { daysUntil: number; dayIndex: number; now: number };
 
 const EMPTY_STATE: SharedTripState = { checked: [], customTodos: [] };
 const STORAGE_KEY = "harsh-trip-2026-state-v1";
 const BOARD_PATH = ["tripBoards", "new-mexico-2026"] as const;
-const TRIP_START = new Date("2026-08-08T00:00:00-05:00").getTime();
+// Trip days roll over at 3 AM Central / 2 AM Mountain, not midnight, so late
+// nights—including the 2–5 AM Perseid window—stay with the day they belong
+// to, and "Today" doesn't flip an hour early during the Mountain Time leg.
+const TRIP_START = new Date("2026-08-08T03:00:00-05:00").getTime();
 const DAY_MS = 86_400_000;
+const TRIP_MILES = 1952;
 
 const tabs: { id: TabId; label: string; shortLabel: string; icon: typeof CalendarDays }[] = [
   { id: "plan", label: "Schedule", shortLabel: "Schedule", icon: CalendarDays },
@@ -102,7 +107,9 @@ const forecastIcons = {
 } as const;
 
 function tripDateLabel(date: string) {
-  return moonNights.find((night) => night.date === date)?.label ?? date.slice(8);
+  const dayId = dayAlmanacs.find((entry) => entry.date === date)?.dayId;
+  const day = tripDays.find((tripDay) => tripDay.id === dayId);
+  return day ? `${day.weekday.slice(0, 3)} ${Number(day.shortDate)}` : String(Number(date.slice(8)));
 }
 
 function cleanSharedState(value: unknown): SharedTripState {
@@ -304,6 +311,7 @@ export default function TripPlanner() {
       setClock({
         daysUntil: Math.max(0, Math.ceil((TRIP_START - now) / DAY_MS)),
         dayIndex: Math.floor((now - TRIP_START) / DAY_MS),
+        now,
       });
     };
     updateClock();
@@ -318,11 +326,20 @@ export default function TripPlanner() {
 
   // Live forecasts and NWS alerts are progressive enhancement: cached in
   // localStorage, quiet on failure, with almanac normals as the fallback.
+  // Skip fetches that cannot produce anything useful: forecasts before the
+  // trip enters Open-Meteo's 16-day window, and everything once the trip is
+  // more than a week in the past.
   useEffect(() => {
     let cancelled = false;
-    void loadForecasts(stopAlmanacs).then((data) => {
-      if (!cancelled) setForecasts(data);
-    });
+    const now = Date.now();
+    const tripEnd = TRIP_START + tripDays.length * DAY_MS;
+    if (now > tripEnd + 7 * DAY_MS) return;
+
+    if (now > TRIP_START - 16 * DAY_MS) {
+      void loadForecasts(stopAlmanacs).then((data) => {
+        if (!cancelled) setForecasts(data);
+      });
+    }
     void loadAlerts(stopAlmanacs).then((data) => {
       if (!cancelled) setAlerts(data);
     });
@@ -441,22 +458,42 @@ export default function TripPlanner() {
     (event) => !event.mode || event.mode === dayThirteenMode,
   );
   const activeAlmanac = dayAlmanacs.find((entry) => entry.dayId === activeDay.id);
+  const activeStop = activeAlmanac
+    ? stopAlmanacs.find((stop) => stop.id === activeAlmanac.stopId)
+    : undefined;
   const activeForecast = activeAlmanac
     ? forecasts[activeAlmanac.stopId]?.days.find((day) => day.date === activeAlmanac.date)
     : undefined;
-  const activeAlerts = activeAlmanac ? (alerts[activeAlmanac.stopId]?.alerts ?? []) : [];
-  const forecastCoversTrip = stopAlmanacs.some((stop) =>
-    forecasts[stop.id]?.days.some((day) => stop.tripDates.includes(day.date)),
+  // NWS alerts describe right now, so they belong only on today's and
+  // tomorrow's cards during the trip—not on a card three weeks out.
+  const dayAlertsRelevant =
+    clock !== null &&
+    clock.dayIndex >= 0 &&
+    selectedDay >= clock.dayIndex &&
+    selectedDay - clock.dayIndex <= 1;
+  const activeAlerts =
+    dayAlertsRelevant && activeAlmanac ? (alerts[activeAlmanac.stopId]?.alerts ?? []) : [];
+
+  const tripDateCoverage = stopAlmanacs.flatMap((stop) =>
+    (stopTripDates[stop.id] ?? []).map((date) =>
+      Boolean(forecasts[stop.id]?.days.some((day) => day.date === date)),
+    ),
   );
+  const coveredDates = tripDateCoverage.filter(Boolean).length;
+  const forecastCoverage =
+    coveredDates === 0 ? "none" : coveredDates === tripDateCoverage.length ? "all" : "partial";
+
   const alertRows = stopAlmanacs.flatMap((stop) =>
     (alerts[stop.id]?.alerts ?? []).map((alert) => ({ stop, alert })),
   );
-  const alertsChecked = Object.keys(alerts).length > 0;
-  // Where the group is on the map right now (index into the map's five stops).
-  const mapStopByDay = [0, 1, 1, 2, 2, 3, 4, 4];
-  const currentMapStop =
-    clock && clock.dayIndex >= 0 && clock.dayIndex < mapStopByDay.length
-      ? mapStopByDay[clock.dayIndex]
+  const alertsCheckedAt = Object.values(alerts).reduce(
+    (latest, stop) => Math.max(latest, stop.fetchedAt),
+    0,
+  );
+  // Where the group is right now, from the same day table the schedule uses.
+  const currentStopId =
+    clock && clock.dayIndex >= 0 && clock.dayIndex < tripDays.length
+      ? (dayAlmanacs.find((entry) => entry.dayId === tripDays[clock.dayIndex].id)?.stopId ?? null)
       : null;
 
   const normalizedQuery = query.trim().toLowerCase();
@@ -496,17 +533,22 @@ export default function TripPlanner() {
     setMustOnly(false);
   };
 
-  const fuelGallons = 1952 / Math.max(mpg, 1);
+  const tripNights = tripDays.length - 1;
+  const fuelGallons = TRIP_MILES / Math.max(mpg, 1);
   const fuelCost = fuelGallons * Math.max(gasPrice, 0);
   const safeTravelers = Math.min(Math.max(travelers, 1), 9);
-  const lodgingCost = 7 * Math.max(lodgingNight, 0);
-  const foodCost = 8 * safeTravelers * Math.max(foodPerDay, 0);
+  const lodgingCost = tripNights * Math.max(lodgingNight, 0);
+  const foodCost = tripDays.length * safeTravelers * Math.max(foodPerDay, 0);
   const ticketsCost = Math.max(ticketsBudget, 0);
   const budgetTotal = fuelCost + lodgingCost + foodCost + ticketsCost;
   const budgetRows = [
-    { label: "Fuel", detail: `${fuelGallons.toFixed(0)} gal · 1,952 mi`, amount: fuelCost },
-    { label: "Lodging", detail: "7 nights", amount: lodgingCost },
-    { label: "Food", detail: `8 days × ${safeTravelers}`, amount: foodCost },
+    {
+      label: "Fuel",
+      detail: `${fuelGallons.toFixed(0)} gal · ${TRIP_MILES.toLocaleString()} mi`,
+      amount: fuelCost,
+    },
+    { label: "Lodging", detail: `${tripNights} nights`, amount: lodgingCost },
+    { label: "Food", detail: `${tripDays.length} days × ${safeTravelers}`, amount: foodCost },
     { label: "Tickets + entries", detail: "opera, pueblo, parks", amount: ticketsCost },
   ];
   const homeMeal = places.find(
@@ -689,10 +731,10 @@ export default function TripPlanner() {
                       <Sunset aria-hidden="true" /> {activeAlmanac.sunset}
                     </span>
                   )}
-                  {activeAlmanac.highF !== undefined && (
+                  {activeStop && !activeAlmanac.enRoute && (
                     <span>
-                      <Thermometer aria-hidden="true" /> {activeAlmanac.highF}° /{" "}
-                      {activeAlmanac.lowF}° typical
+                      <Thermometer aria-hidden="true" /> {activeStop.augHighF}° /{" "}
+                      {activeStop.augLowF}° typical
                     </span>
                   )}
                   {activeAlmanac.stormWindow && (
@@ -703,9 +745,13 @@ export default function TripPlanner() {
                   {activeForecast && (
                     <span className="cond-live">
                       <CloudSun aria-hidden="true" /> Forecast:{" "}
-                      {describeWeatherCode(activeForecast.weatherCode).label.toLowerCase()} ·{" "}
-                      {activeForecast.highF}°/{activeForecast.lowF}° ·{" "}
-                      {activeForecast.precipChance}% rain
+                      {activeForecast.weatherCode !== null
+                        ? `${describeWeatherCode(activeForecast.weatherCode).label.toLowerCase()} · `
+                        : ""}
+                      {activeForecast.highF}°/{activeForecast.lowF}°
+                      {activeForecast.precipChance !== null
+                        ? ` · ${activeForecast.precipChance}% rain`
+                        : ""}
                     </span>
                   )}
                   {activeAlerts.map((alert) => (
@@ -932,9 +978,11 @@ export default function TripPlanner() {
             <div className="forecast-note">
               <CloudSun aria-hidden="true" />
               <span>
-                {forecastCoversTrip
-                  ? "Trip dates are inside the live 16-day window—forecast tiles below refresh on every visit and stay cached for offline mornings."
-                  : forecastWindowNote}
+                {forecastCoverage === "all"
+                  ? "All trip dates are inside the live 16-day window—forecast tiles below refresh on every visit and stay cached for offline mornings."
+                  : forecastCoverage === "partial"
+                    ? "Live forecasts are filling in day by day as trip dates enter the 16-day window—tiles still marked “normals” aren't in range yet."
+                    : forecastWindowNote}
               </span>
             </div>
 
@@ -943,7 +991,7 @@ export default function TripPlanner() {
                 {alertRows.map(({ stop, alert }) => (
                   <a
                     className="alert-row"
-                    key={alert.id}
+                    key={`${stop.id}-${alert.id}`}
                     href={stop.nwsUrl}
                     target="_blank"
                     rel="noreferrer"
@@ -960,10 +1008,12 @@ export default function TripPlanner() {
                 ))}
               </div>
             ) : (
-              alertsChecked && (
+              alertsCheckedAt > 0 && (
                 <p className="alerts-clear">
-                  <CheckCircle2 aria-hidden="true" /> No active NWS watches or warnings at any
-                  stop right now—checked live against api.weather.gov.
+                  <CheckCircle2 aria-hidden="true" />{" "}
+                  {(clock?.now ?? alertsCheckedAt) - alertsCheckedAt < 90 * 60 * 1000
+                    ? `No active NWS watches or warnings at any stop as of ${new Date(alertsCheckedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}.`
+                    : "Couldn't refresh NWS alerts—use the NWS forecast links on each stop for current watches and warnings."}
                 </p>
               )
             )}
@@ -995,7 +1045,7 @@ export default function TripPlanner() {
                     </span>
                   </div>
                   <div className="forecast-days">
-                    {stop.tripDates.map((date) => {
+                    {(stopTripDates[stop.id] ?? []).map((date) => {
                       const forecast = forecasts[stop.id]?.days.find(
                         (day) => day.date === date,
                       );
@@ -1010,18 +1060,26 @@ export default function TripPlanner() {
                           </div>
                         );
                       }
-                      const described = describeWeatherCode(forecast.weatherCode);
-                      const Icon = forecastIcons[described.group];
+                      const described =
+                        forecast.weatherCode !== null
+                          ? describeWeatherCode(forecast.weatherCode)
+                          : null;
+                      const Icon = forecastIcons[described?.group ?? "cloud"];
                       return (
                         <div className="forecast-day" key={date}>
                           <small>{tripDateLabel(date)}</small>
-                          <Icon className={`fc-${described.group}`} aria-hidden="true" />
+                          <Icon className={`fc-${described?.group ?? "cloud"}`} aria-hidden="true" />
                           <strong>
                             {forecast.highF}°<span>/{forecast.lowF}°</span>
                           </strong>
                           <em>
-                            <Droplets aria-hidden="true" /> {forecast.precipChance}% ·{" "}
-                            {described.label}
+                            {forecast.precipChance !== null && (
+                              <>
+                                <Droplets aria-hidden="true" /> {forecast.precipChance}%
+                              </>
+                            )}
+                            {forecast.precipChance !== null && described ? " · " : ""}
+                            {described?.label}
                           </em>
                         </div>
                       );
@@ -1281,7 +1339,7 @@ export default function TripPlanner() {
 
             <div className="route-board">
               <h3>1,952 miles · 30 hr 11 min driving</h3>
-              <RouteMap currentStop={currentMapStop} />
+              <RouteMap currentStopId={currentStopId} />
               <ol className="route-list">
                 {routeStops.map((stop, index) => (
                   <li key={`${stop.place}-${index}`}>
