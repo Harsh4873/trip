@@ -9,22 +9,36 @@ import {
   ChevronRight,
   Circle,
   Clock3,
+  Cloud,
+  CloudFog,
+  CloudLightning,
+  CloudRain,
+  CloudSnow,
+  CloudSun,
   Coffee,
   Compass,
+  Droplets,
   ExternalLink,
-  Fuel,
   Gauge,
   ListChecks,
+  MapPin,
   MapPinned,
   Minus,
+  MoonStar,
   Navigation,
   Plus,
   RefreshCw,
   Route,
   Search,
   ShieldAlert,
+  Sparkles,
+  Sun,
+  Sunrise,
+  Sunset,
+  Thermometer,
   Trash2,
   Utensils,
+  Wallet,
   WifiOff,
 } from "lucide-react";
 import { doc, onSnapshot, serverTimestamp, setDoc } from "firebase/firestore";
@@ -42,8 +56,23 @@ import {
   type Place,
   type PlaceCategory,
 } from "./trip-data";
+import RouteMap from "./RouteMap";
+import {
+  dayAlmanacs,
+  forecastWindowNote,
+  moonNights,
+  perseids,
+  stopAlmanacs,
+} from "./almanac-data";
+import {
+  describeWeatherCode,
+  loadAlerts,
+  loadForecasts,
+  type StopAlerts,
+  type StopForecast,
+} from "./weather";
 
-type TabId = "plan" | "explore" | "checklist" | "info";
+type TabId = "plan" | "explore" | "weather" | "checklist" | "info";
 type SyncStatus = "connecting" | "saving" | "synced" | "offline";
 type CustomTodo = { id: string; text: string };
 type SharedTripState = { checked: string[]; customTodos: CustomTodo[] };
@@ -57,10 +86,24 @@ const DAY_MS = 86_400_000;
 
 const tabs: { id: TabId; label: string; shortLabel: string; icon: typeof CalendarDays }[] = [
   { id: "plan", label: "Schedule", shortLabel: "Schedule", icon: CalendarDays },
-  { id: "explore", label: "Food & attractions", shortLabel: "Food & sights", icon: MapPinned },
+  { id: "explore", label: "Food & attractions", shortLabel: "Food", icon: MapPinned },
+  { id: "weather", label: "Weather & sky", shortLabel: "Weather", icon: CloudSun },
   { id: "checklist", label: "Checklist", shortLabel: "Checklist", icon: ListChecks },
-  { id: "info", label: "Trip info", shortLabel: "Trip info", icon: Route },
+  { id: "info", label: "Trip info", shortLabel: "Info", icon: Route },
 ];
+
+const forecastIcons = {
+  clear: Sun,
+  cloud: Cloud,
+  fog: CloudFog,
+  rain: CloudRain,
+  snow: CloudSnow,
+  storm: CloudLightning,
+} as const;
+
+function tripDateLabel(date: string) {
+  return moonNights.find((night) => night.date === date)?.label ?? date.slice(8);
+}
 
 function cleanSharedState(value: unknown): SharedTripState {
   if (!value || typeof value !== "object") return EMPTY_STATE;
@@ -149,6 +192,9 @@ function CheckButton({
 
 function PlaceCard({ place }: { place: Place }) {
   const meta = [place.city, place.hours, place.cost, place.duration].filter(Boolean).join(" · ");
+  const mapHref = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
+    `${place.name}, ${place.city}`,
+  )}`;
 
   return (
     <article className={`place-card${place.closed ? " is-closed" : ""}`}>
@@ -177,6 +223,17 @@ function PlaceCard({ place }: { place: Place }) {
       <p className="place-note">{place.note}</p>
       <div className="place-foot">
         {place.mustDo && <span className="must-badge">Don’t miss</span>}
+        {!place.closed && (
+          <a
+            className="card-link"
+            href={mapHref}
+            target="_blank"
+            rel="noreferrer"
+            aria-label={`Open ${place.name} in Google Maps`}
+          >
+            <MapPin aria-hidden="true" /> Map
+          </a>
+        )}
         {place.href && (
           <a className="card-link" href={place.href} target="_blank" rel="noreferrer">
             Official info <ExternalLink aria-hidden="true" />
@@ -195,14 +252,21 @@ export default function TripPlanner() {
   const [kindFilter, setKindFilter] = useState<PlaceCategory | "all">("all");
   const [areaFilter, setAreaFilter] = useState<Area | "all">("all");
   const [dayFilter, setDayFilter] = useState<string>("all");
+  const [mustOnly, setMustOnly] = useState(false);
   const [shared, setShared] = useState<SharedTripState>(EMPTY_STATE);
   const [hydrated, setHydrated] = useState(false);
   const [remoteReady, setRemoteReady] = useState(false);
   const [syncStatus, setSyncStatus] = useState<SyncStatus>("connecting");
   const [customTodoText, setCustomTodoText] = useState("");
   const [clock, setClock] = useState<TripClock | null>(null);
+  const [forecasts, setForecasts] = useState<Record<string, StopForecast>>({});
+  const [alerts, setAlerts] = useState<Record<string, StopAlerts>>({});
   const [mpg, setMpg] = useState(28);
   const [gasPrice, setGasPrice] = useState(3.15);
+  const [travelers, setTravelers] = useState(4);
+  const [lodgingNight, setLodgingNight] = useState(150);
+  const [foodPerDay, setFoodPerDay] = useState(30);
+  const [ticketsBudget, setTicketsBudget] = useState(350);
   const [homeRoute, setHomeRoute] = useState<"abilene" | "wichita">("abilene");
   const stateRef = useRef(shared);
   const boardRef = useRef<DocumentReference<DocumentData> | null>(null);
@@ -251,6 +315,21 @@ export default function TripPlanner() {
   useEffect(() => {
     stateRef.current = shared;
   }, [shared]);
+
+  // Live forecasts and NWS alerts are progressive enhancement: cached in
+  // localStorage, quiet on failure, with almanac normals as the fallback.
+  useEffect(() => {
+    let cancelled = false;
+    void loadForecasts(stopAlmanacs).then((data) => {
+      if (!cancelled) setForecasts(data);
+    });
+    void loadAlerts(stopAlmanacs).then((data) => {
+      if (!cancelled) setAlerts(data);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     let unsubscribe: (() => void) | undefined;
@@ -361,12 +440,31 @@ export default function TripPlanner() {
   const activeEvents = activeDay.events.filter(
     (event) => !event.mode || event.mode === dayThirteenMode,
   );
+  const activeAlmanac = dayAlmanacs.find((entry) => entry.dayId === activeDay.id);
+  const activeForecast = activeAlmanac
+    ? forecasts[activeAlmanac.stopId]?.days.find((day) => day.date === activeAlmanac.date)
+    : undefined;
+  const activeAlerts = activeAlmanac ? (alerts[activeAlmanac.stopId]?.alerts ?? []) : [];
+  const forecastCoversTrip = stopAlmanacs.some((stop) =>
+    forecasts[stop.id]?.days.some((day) => stop.tripDates.includes(day.date)),
+  );
+  const alertRows = stopAlmanacs.flatMap((stop) =>
+    (alerts[stop.id]?.alerts ?? []).map((alert) => ({ stop, alert })),
+  );
+  const alertsChecked = Object.keys(alerts).length > 0;
+  // Where the group is on the map right now (index into the map's five stops).
+  const mapStopByDay = [0, 1, 1, 2, 2, 3, 4, 4];
+  const currentMapStop =
+    clock && clock.dayIndex >= 0 && clock.dayIndex < mapStopByDay.length
+      ? mapStopByDay[clock.dayIndex]
+      : null;
 
   const normalizedQuery = query.trim().toLowerCase();
   const filteredPlaces = places.filter((place) => {
     if (kindFilter !== "all" && place.category !== kindFilter) return false;
     if (areaFilter !== "all" && place.area !== areaFilter) return false;
     if (dayFilter !== "all" && !place.dayIds.includes(dayFilter)) return false;
+    if (mustOnly && !place.mustDo) return false;
     if (normalizedQuery) {
       const haystack = [
         place.name,
@@ -384,17 +482,33 @@ export default function TripPlanner() {
     return true;
   });
   const filtersActive =
-    kindFilter !== "all" || areaFilter !== "all" || dayFilter !== "all" || normalizedQuery !== "";
+    kindFilter !== "all" ||
+    areaFilter !== "all" ||
+    dayFilter !== "all" ||
+    mustOnly ||
+    normalizedQuery !== "";
 
   const clearFilters = () => {
     setQuery("");
     setKindFilter("all");
     setAreaFilter("all");
     setDayFilter("all");
+    setMustOnly(false);
   };
 
   const fuelGallons = 1952 / Math.max(mpg, 1);
   const fuelCost = fuelGallons * Math.max(gasPrice, 0);
+  const safeTravelers = Math.min(Math.max(travelers, 1), 9);
+  const lodgingCost = 7 * Math.max(lodgingNight, 0);
+  const foodCost = 8 * safeTravelers * Math.max(foodPerDay, 0);
+  const ticketsCost = Math.max(ticketsBudget, 0);
+  const budgetTotal = fuelCost + lodgingCost + foodCost + ticketsCost;
+  const budgetRows = [
+    { label: "Fuel", detail: `${fuelGallons.toFixed(0)} gal · 1,952 mi`, amount: fuelCost },
+    { label: "Lodging", detail: "7 nights", amount: lodgingCost },
+    { label: "Food", detail: `8 days × ${safeTravelers}`, amount: foodCost },
+    { label: "Tickets + entries", detail: "opera, pueblo, parks", amount: ticketsCost },
+  ];
   const homeMeal = places.find(
     (place) => place.id === (homeRoute === "abilene" ? "spicy-india" : "masala-curry"),
   );
@@ -493,19 +607,23 @@ export default function TripPlanner() {
             </div>
 
             <div className="day-picker" aria-label="Choose trip day" ref={dayPickerRef}>
-              {tripDays.map((day, index) => (
-                <button
-                  type="button"
-                  key={day.id}
-                  className={selectedDay === index ? "active" : ""}
-                  onClick={() => setSelectedDay(index)}
-                  aria-current={selectedDay === index ? "date" : undefined}
-                >
-                  <small>{day.weekday.slice(0, 3)}</small>
-                  <strong>{day.shortDate}</strong>
-                  <span>{day.stop}</span>
-                </button>
-              ))}
+              {tripDays.map((day, index) => {
+                const isToday = clock?.dayIndex === index;
+                return (
+                  <button
+                    type="button"
+                    key={day.id}
+                    className={`${selectedDay === index ? "active" : ""}${isToday ? " is-today" : ""}`}
+                    onClick={() => setSelectedDay(index)}
+                    aria-current={selectedDay === index ? "date" : undefined}
+                    aria-label={`${day.weekday} August ${Number(day.shortDate)} · ${day.stop}${isToday ? " · today" : ""}`}
+                  >
+                    <small>{isToday ? "Today" : day.weekday.slice(0, 3)}</small>
+                    <strong>{day.shortDate}</strong>
+                    <span>{day.stop}</span>
+                  </button>
+                );
+              })}
             </div>
 
             <article className="day-card">
@@ -560,6 +678,43 @@ export default function TripPlanner() {
                   <Clock3 aria-hidden="true" /> {activeDay.timezone}
                 </span>
               </div>
+
+              {activeAlmanac && (
+                <div className="day-conditions" aria-label="Sun and weather for this day">
+                  <span>
+                    <Sunrise aria-hidden="true" /> {activeAlmanac.sunrise}
+                  </span>
+                  {activeAlmanac.sunset && (
+                    <span>
+                      <Sunset aria-hidden="true" /> {activeAlmanac.sunset}
+                    </span>
+                  )}
+                  {activeAlmanac.highF !== undefined && (
+                    <span>
+                      <Thermometer aria-hidden="true" /> {activeAlmanac.highF}° /{" "}
+                      {activeAlmanac.lowF}° typical
+                    </span>
+                  )}
+                  {activeAlmanac.stormWindow && (
+                    <span className="cond-storm">
+                      <CloudLightning aria-hidden="true" /> {activeAlmanac.stormWindow}
+                    </span>
+                  )}
+                  {activeForecast && (
+                    <span className="cond-live">
+                      <CloudSun aria-hidden="true" /> Forecast:{" "}
+                      {describeWeatherCode(activeForecast.weatherCode).label.toLowerCase()} ·{" "}
+                      {activeForecast.highF}°/{activeForecast.lowF}° ·{" "}
+                      {activeForecast.precipChance}% rain
+                    </span>
+                  )}
+                  {activeAlerts.map((alert) => (
+                    <span className="cond-alert" key={alert.id}>
+                      <ShieldAlert aria-hidden="true" /> NWS: {alert.event}
+                    </span>
+                  ))}
+                </div>
+              )}
 
               {activeDay.advisory && (
                 <div className="advisory">
@@ -695,6 +850,15 @@ export default function TripPlanner() {
                   ))}
                 </select>
               </label>
+
+              <button
+                type="button"
+                className={`must-toggle ${mustOnly ? "active" : ""}`}
+                aria-pressed={mustOnly}
+                onClick={() => setMustOnly((value) => !value)}
+              >
+                <Sparkles aria-hidden="true" /> Don’t-miss
+              </button>
             </div>
 
             <div className="chip-row" role="group" aria-label="Filter by place">
@@ -746,6 +910,238 @@ export default function TripPlanner() {
                 </button>
               </div>
             )}
+          </section>
+        )}
+
+        {activeTab === "weather" && (
+          <section
+            className="panel"
+            id="weather-panel"
+            role="tabpanel"
+            aria-labelledby="tab-weather"
+          >
+            <div className="panel-head">
+              <h2>Weather & sky</h2>
+              <p>
+                Aug 8–15 sits in the peak weeks of the North American Monsoon: sunny, calm
+                mornings almost every day, storms building over the mountains after lunch.
+                The typical numbers below are NOAA 1991–2020 normals for these exact dates.
+              </p>
+            </div>
+
+            <div className="forecast-note">
+              <CloudSun aria-hidden="true" />
+              <span>
+                {forecastCoversTrip
+                  ? "Trip dates are inside the live 16-day window—forecast tiles below refresh on every visit and stay cached for offline mornings."
+                  : forecastWindowNote}
+              </span>
+            </div>
+
+            {alertRows.length > 0 ? (
+              <div className="alerts-strip" role="status">
+                {alertRows.map(({ stop, alert }) => (
+                  <a
+                    className="alert-row"
+                    key={alert.id}
+                    href={stop.nwsUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    <ShieldAlert aria-hidden="true" />
+                    <span>
+                      <strong>
+                        {stop.name}: {alert.event}
+                      </strong>
+                      {alert.headline && <small>{alert.headline}</small>}
+                    </span>
+                    <ExternalLink aria-hidden="true" />
+                  </a>
+                ))}
+              </div>
+            ) : (
+              alertsChecked && (
+                <p className="alerts-clear">
+                  <CheckCircle2 aria-hidden="true" /> No active NWS watches or warnings at any
+                  stop right now—checked live against api.weather.gov.
+                </p>
+              )
+            )}
+
+            <div className="stop-weather-grid">
+              {stopAlmanacs.map((stop) => (
+                <article className="stop-weather-card" key={stop.id}>
+                  <div className="stop-weather-head">
+                    <div>
+                      <h3>{stop.name}</h3>
+                      <small>
+                        {stop.nights} · {stop.elevationFt.toLocaleString()} ft
+                      </small>
+                    </div>
+                    <a className="card-link" href={stop.nwsUrl} target="_blank" rel="noreferrer">
+                      NWS forecast <ExternalLink aria-hidden="true" />
+                    </a>
+                  </div>
+                  <div className="normals-row">
+                    <span className="normal-chip">
+                      <Thermometer aria-hidden="true" /> August normal{" "}
+                      <strong>
+                        {stop.augHighF}° / {stop.augLowF}°
+                      </strong>
+                    </span>
+                    <span className="normal-chip">
+                      <CloudRain aria-hidden="true" />
+                      <strong>{stop.augPrecipIn}″</strong> · {stop.augRainDays} rain days
+                    </span>
+                  </div>
+                  <div className="forecast-days">
+                    {stop.tripDates.map((date) => {
+                      const forecast = forecasts[stop.id]?.days.find(
+                        (day) => day.date === date,
+                      );
+                      if (!forecast) {
+                        return (
+                          <div className="forecast-day pending" key={date}>
+                            <small>{tripDateLabel(date)}</small>
+                            <strong>
+                              {stop.augHighF}°<span>/{stop.augLowF}°</span>
+                            </strong>
+                            <em>normals</em>
+                          </div>
+                        );
+                      }
+                      const described = describeWeatherCode(forecast.weatherCode);
+                      const Icon = forecastIcons[described.group];
+                      return (
+                        <div className="forecast-day" key={date}>
+                          <small>{tripDateLabel(date)}</small>
+                          <Icon className={`fc-${described.group}`} aria-hidden="true" />
+                          <strong>
+                            {forecast.highF}°<span>/{forecast.lowF}°</span>
+                          </strong>
+                          <em>
+                            <Droplets aria-hidden="true" /> {forecast.precipChance}% ·{" "}
+                            {described.label}
+                          </em>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <p className="stop-weather-note">{stop.climateNote}</p>
+                  <p className="stop-weather-note">{stop.stormNote}</p>
+                </article>
+              ))}
+            </div>
+
+            <div className="monsoon-card">
+              <h3>
+                <CloudLightning aria-hidden="true" /> The monsoon, in one minute
+              </h3>
+              <p>
+                August is the wettest month of the year in Taos (1.77″) and Santa Fe (1.96″),
+                but it arrives in bursts and breaks—some trip days will stay bone dry, others
+                fire widespread storms. The daily rhythm is reliable enough to plan around:
+              </p>
+              <div className="monsoon-rhythm">
+                <div>
+                  <strong>
+                    <Sun aria-hidden="true" /> Morning · clear
+                  </strong>
+                  <p>
+                    Sunny, calm, dry nearly every day. The window for the Gorge Bridge,
+                    Bandelier, and canyon trails—UV hits 10–12 at altitude, so sun protection
+                    from the start.
+                  </p>
+                </div>
+                <div>
+                  <strong>
+                    <Cloud aria-hidden="true" /> Midday · building
+                  </strong>
+                  <p>
+                    Cumulus stacks over the Sangre de Cristos, Jemez, and Sandias by 11 AM;
+                    first storms on the peaks noon–2 PM. Be off exposed rims and high points
+                    by about 1 PM.
+                  </p>
+                </div>
+                <div>
+                  <strong>
+                    <CloudLightning aria-hidden="true" /> Afternoon · storms
+                  </strong>
+                  <p>
+                    Cells drift over valleys 2–8 PM: brief heavy rain, gusty outflow, and a
+                    lot of lightning. Wait 30 minutes after the last thunder; most storms die
+                    out by late evening.
+                  </p>
+                </div>
+              </div>
+              <p className="small-note">
+                Flash floods run ahead of the rain: burn scars above Frijoles Canyon and slot
+                drainages can flood from storms miles upstream while the sky overhead stays
+                blue. Never cross moving water, at Palo Duro or anywhere else.
+              </p>
+            </div>
+
+            <div className="sky-grid">
+              <article className="tool-card">
+                <h3>
+                  <Sunrise aria-hidden="true" /> Sun, day by day
+                </h3>
+                <table className="sun-table">
+                  <thead>
+                    <tr>
+                      <th scope="col">Day</th>
+                      <th scope="col">Sunrise</th>
+                      <th scope="col">Sunset</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {dayAlmanacs.map((entry) => {
+                      const day = tripDays.find((tripDay) => tripDay.id === entry.dayId);
+                      if (!day) return null;
+                      const tonight = clock?.dayIndex === tripDays.indexOf(day);
+                      return (
+                        <tr key={entry.dayId} className={tonight ? "is-tonight" : undefined}>
+                          <td>
+                            {day.weekday.slice(0, 3)} {Number(day.shortDate)}{" "}
+                            <small>· {day.stop}</small>
+                          </td>
+                          <td>{entry.sunrise}</td>
+                          <td>{entry.sunset ?? "en route"}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+                <p className="small-note">
+                  Aug 9 and Aug 14 cross time zones, so those rows mix CDT and MDT on
+                  purpose—sunrise is where the day starts, sunset where it ends.
+                </p>
+              </article>
+
+              <article className="tool-card">
+                <h3>
+                  <MoonStar aria-hidden="true" /> Moon & meteors, night by night
+                </h3>
+                <div className="moon-list">
+                  {moonNights.map((night) => (
+                    <div className="moon-row" key={night.date}>
+                      <strong>{night.label}</strong>
+                      <span className="moon-phase">
+                        {night.phase} · {night.illumination}%
+                      </span>
+                      <span className="moon-note">{night.note}</span>
+                    </div>
+                  ))}
+                </div>
+                <div className="perseids-callout">
+                  <Sparkles aria-hidden="true" />
+                  <div>
+                    <strong>{perseids.title}</strong>
+                    <p>{perseids.detail}</p>
+                  </div>
+                </div>
+              </article>
+            </div>
           </section>
         )}
 
@@ -885,6 +1281,7 @@ export default function TripPlanner() {
 
             <div className="route-board">
               <h3>1,952 miles · 30 hr 11 min driving</h3>
+              <RouteMap currentStop={currentMapStop} />
               <ol className="route-list">
                 {routeStops.map((stop, index) => (
                   <li key={`${stop.place}-${index}`}>
@@ -927,9 +1324,12 @@ export default function TripPlanner() {
 
               <article className="tool-card">
                 <h3>
-                  <Fuel aria-hidden="true" /> Fuel estimate
+                  <Wallet aria-hidden="true" /> Trip budget sketch
                 </h3>
-                <p>About {fuelGallons.toFixed(1)} gallons for the full 1,952-mile loop.</p>
+                <p>
+                  Planning math, not bookkeeping—edit the numbers to match the group and the
+                  bars re-balance.
+                </p>
                 <div className="input-pair">
                   <label>
                     Vehicle MPG
@@ -954,10 +1354,81 @@ export default function TripPlanner() {
                     />
                   </label>
                 </div>
-                <div className="fuel-total">
-                  <span>Estimated fuel cost</span>
-                  <strong>${Number.isFinite(fuelCost) ? fuelCost.toFixed(0) : "0"}</strong>
+                <div className="input-pair">
+                  <label>
+                    Travelers
+                    <input
+                      type="number"
+                      min="1"
+                      max="9"
+                      step="1"
+                      value={travelers}
+                      onChange={(event) => setTravelers(Number(event.target.value))}
+                    />
+                  </label>
+                  <label>
+                    Lodging $/night
+                    <input
+                      type="number"
+                      min="0"
+                      max="1000"
+                      step="10"
+                      value={lodgingNight}
+                      onChange={(event) => setLodgingNight(Number(event.target.value))}
+                    />
+                  </label>
                 </div>
+                <div className="input-pair">
+                  <label>
+                    Food $/person/day
+                    <input
+                      type="number"
+                      min="0"
+                      max="200"
+                      step="5"
+                      value={foodPerDay}
+                      onChange={(event) => setFoodPerDay(Number(event.target.value))}
+                    />
+                  </label>
+                  <label>
+                    Tickets + entries $
+                    <input
+                      type="number"
+                      min="0"
+                      max="3000"
+                      step="25"
+                      value={ticketsBudget}
+                      onChange={(event) => setTicketsBudget(Number(event.target.value))}
+                    />
+                  </label>
+                </div>
+                <div className="budget-rows">
+                  {budgetRows.map((row) => {
+                    const share = budgetTotal > 0 ? Math.max(2, (row.amount / budgetTotal) * 100) : 0;
+                    return (
+                      <div className="budget-row" key={row.label}>
+                        <div className="budget-row-head">
+                          <span>
+                            {row.label} <small>{row.detail}</small>
+                          </span>
+                          <strong>${Number.isFinite(row.amount) ? Math.round(row.amount) : 0}</strong>
+                        </div>
+                        <div className="budget-bar">
+                          <i style={{ width: `${share}%` }} />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+                <div className="fuel-total">
+                  <span>Whole-trip estimate</span>
+                  <strong>${Number.isFinite(budgetTotal) ? Math.round(budgetTotal) : 0}</strong>
+                </div>
+                <p className="small-note">
+                  Opera seats, Taos Pueblo ($25 each), Bandelier ($25/vehicle), Palo Duro, and
+                  Nambé Falls ($20/vehicle) all land in the tickets line—see each card in Food
+                  &amp; attractions for current prices.
+                </p>
               </article>
 
               <article className="tool-card">
