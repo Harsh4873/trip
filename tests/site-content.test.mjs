@@ -34,11 +34,12 @@ test("keeps the food + attraction directory aligned with the trip's constraints"
 });
 
 test("keeps the site standalone and Pages-safe", async () => {
-  const [config, workflow, layout, page, packageJson] = await Promise.all([
+  const [config, workflow, layout, page, pinGate, packageJson] = await Promise.all([
     readFile(new URL("next.config.ts", root), "utf8"),
     readFile(new URL(".github/workflows/deploy-pages.yml", root), "utf8"),
     readFile(new URL("app/layout.tsx", root), "utf8"),
     readFile(new URL("app/page.tsx", root), "utf8"),
+    readFile(new URL("app/PinGate.tsx", root), "utf8"),
     readFile(new URL("package.json", root), "utf8"),
   ]);
 
@@ -46,6 +47,10 @@ test("keeps the site standalone and Pages-safe", async () => {
   assert.match(workflow, /test ! -e out\/CNAME/);
   assert.match(layout, /index: false/);
   assert.match(layout, /canonical: "\/trip\/"/);
+  assert.match(page, /<PinGate \/>/);
+  assert.match(pinGate, /const ACCESS_PIN = "6002"/);
+  assert.match(pinGate, /sessionStorage/);
+  assert.match(pinGate, /dynamic\(\(\) => import\("\.\/TripPlanner"\)\)/);
   assert.doesNotMatch(page, /_sites-preview|SkeletonPreview/);
   assert.doesNotMatch(packageJson, /react-loading-skeleton/);
   await assert.rejects(access(new URL("public/CNAME", root)));

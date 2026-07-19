@@ -1,5 +1,5 @@
-import TripPlanner from "./TripPlanner";
+import PinGate from "./PinGate";
 
 export default function Home() {
-  return <TripPlanner />;
+  return <PinGate />;
 }

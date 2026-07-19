@@ -63,6 +63,94 @@ main { flex: 1; }
 
 /* ——— Header ——— */
 
+body.access-locked { overflow: hidden; }
+
+.access-page {
+  min-height: 100dvh; display: grid; place-items: center; position: relative; isolation: isolate;
+  overflow: hidden; padding: 28px; background: var(--green);
+}
+.access-backdrop {
+  position: fixed; inset: -24px; z-index: -2; overflow: hidden; pointer-events: none;
+  background: var(--bg); filter: blur(11px) saturate(.82); transform: scale(1.035);
+}
+.access-backdrop::after {
+  content: ""; position: absolute; inset: 0; background: rgba(18, 43, 31, .52);
+  backdrop-filter: blur(2px);
+}
+.access-backdrop-bar {
+  height: 76px; padding: 0 8vw; display: flex; align-items: center; gap: 16px; background: var(--green);
+}
+.access-backdrop-logo {
+  width: 42px; height: 42px; border-radius: 50%; display: grid; place-items: center;
+  background: var(--terra); color: white; font-size: 11px; font-weight: 800;
+}
+.access-backdrop-bar > span:last-child { width: 130px; height: 12px; border-radius: 99px; background: rgba(255,255,255,.42); }
+.access-backdrop-hero {
+  min-height: 62vh; padding: 12vh 10vw; display: grid; grid-template-columns: 1.1fr .75fr; align-items: center;
+  gap: 10vw; background: var(--green); color: white;
+}
+.access-backdrop-hero > div:first-child { display: grid; gap: 16px; }
+.access-backdrop-hero span { width: 28%; height: 12px; border-radius: 99px; background: #d8b779; }
+.access-backdrop-hero strong { width: 88%; height: 68px; border-radius: 12px; background: rgba(255,255,255,.75); }
+.access-backdrop-hero strong:nth-child(3) { width: 66%; }
+.access-backdrop-hero small { width: 95%; height: 10px; border-radius: 99px; background: rgba(255,255,255,.32); }
+.access-backdrop-hero small:last-child { width: 72%; }
+.access-backdrop-map {
+  height: 300px; padding: 54px 35px; border: 1px solid rgba(255,255,255,.25); border-radius: 28px;
+  display: flex; justify-content: space-between; align-items: center; position: relative; background: rgba(255,255,255,.1);
+}
+.access-backdrop-map::before { content: ""; position: absolute; left: 45px; right: 45px; top: 50%; border-top: 2px dashed rgba(255,255,255,.35); }
+.access-backdrop-map i { width: 24px; height: 24px; z-index: 1; border: 5px solid #e0c58e; border-radius: 50%; background: var(--green); }
+.access-backdrop-cards { padding: 55px 9vw; display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
+.access-backdrop-cards span { height: 240px; border-radius: 24px; border: 1px solid var(--line); background: var(--card); box-shadow: var(--shadow); }
+
+.access-card {
+  width: min(100%, 430px); padding: 30px 34px 28px; border: 1px solid rgba(255,255,255,.72); border-radius: 28px;
+  background: rgba(255, 253, 248, .96); color: var(--ink); box-shadow: 0 35px 90px rgba(8, 24, 18, .34);
+}
+.access-brand { display: flex; align-items: center; gap: 11px; padding-bottom: 25px; border-bottom: 1px solid var(--line); }
+.access-brand-mark {
+  width: 38px; height: 38px; display: grid; place-items: center; border-radius: 11px; background: var(--green); color: white;
+}
+.access-brand-mark svg { width: 18px; height: 18px; }
+.access-brand > span:last-child { display: grid; gap: 3px; }
+.access-brand strong { font-size: 12px; letter-spacing: .01em; }
+.access-brand small { color: var(--muted); font-size: 9px; text-transform: uppercase; letter-spacing: .11em; }
+.access-lock {
+  width: 51px; height: 51px; margin: 27px 0 20px; display: grid; place-items: center; border-radius: 16px;
+  background: var(--terra-soft); color: var(--terra); box-shadow: inset 0 0 0 1px rgba(164,67,26,.1);
+}
+.access-lock svg { width: 22px; height: 22px; }
+.access-eyebrow { margin: 0 0 7px; color: var(--terra); font-size: 11px; font-weight: 750; text-transform: uppercase; letter-spacing: .13em; }
+.access-card h1 { margin: 0; font-size: 32px; line-height: 1.15; font-weight: 700; letter-spacing: -.025em; }
+.access-copy { margin: 12px 0 25px; color: var(--muted); font-size: 14px; line-height: 1.6; }
+.access-form label { display: block; margin-bottom: 8px; color: var(--muted); font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; }
+.access-input-wrap {
+  height: 56px; padding: 5px; display: grid; grid-template-columns: 1fr 46px; gap: 7px; border: 1px solid var(--line);
+  border-radius: var(--radius-lg); background: white; transition: border-color .2s ease, box-shadow .2s ease;
+}
+.access-input-wrap:focus-within { border-color: var(--green); box-shadow: 0 0 0 4px rgba(33,89,63,.12); }
+.access-input-wrap.has-error { border-color: var(--terra); box-shadow: 0 0 0 4px rgba(164,67,26,.1); }
+.access-input-wrap input {
+  width: 100%; min-width: 0; border: 0; outline: 0; padding: 0 12px; background: transparent; color: var(--ink);
+  font-size: 22px; font-weight: 800; letter-spacing: .32em;
+}
+.access-input-wrap input::placeholder { color: #b9c0ba; letter-spacing: .22em; }
+.access-input-wrap button {
+  border: 0; border-radius: var(--radius-md); display: grid; place-items: center; background: var(--green); color: white; cursor: pointer;
+  transition: transform .2s ease, opacity .2s ease, background .2s ease;
+}
+.access-input-wrap button:hover:not(:disabled) { transform: translateX(2px); background: #174b34; }
+.access-input-wrap button:disabled { opacity: .35; cursor: not-allowed; }
+.access-input-wrap button svg { width: 18px; height: 18px; }
+.access-message { min-height: 18px; margin: 8px 2px 0; color: var(--muted); font-size: 12px; line-height: 1.4; }
+.access-message.is-error { color: var(--terra); font-weight: 700; }
+.access-private-note {
+  margin-top: 19px; padding-top: 18px; border-top: 1px solid var(--line); display: flex; align-items: center; gap: 8px;
+  color: var(--muted); font-size: 12px;
+}
+.access-private-note svg { width: 15px; height: 15px; color: var(--green); }
+
 .topbar {
   min-height: 58px;
   padding: 8px max(20px, calc((100vw - 1080px) / 2));
@@ -907,6 +995,15 @@ footer strong { color: var(--ink); }
 
   /* 16px inputs prevent iOS Safari from zooming the page on focus. */
   .search-box input, .day-select select, .add-todo input, .input-pair input { font-size: 16px; }
+
+  .access-page { padding: 16px; }
+  .access-backdrop-hero { grid-template-columns: 1fr; }
+  .access-backdrop-map { display: none; }
+  .access-backdrop-cards { grid-template-columns: 1fr; }
+  .access-backdrop-cards span:not(:first-child) { display: none; }
+  .access-card { padding: 25px 22px 23px; border-radius: 23px; }
+  .access-card h1 { font-size: 28px; }
+  .access-lock { margin-top: 23px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
