@@ -1,5 +1,12 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import "./globals.css";
+
+export const viewport: Viewport = {
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#1c5138" },
+    { media: "(prefers-color-scheme: dark)", color: "#12321f" },
+  ],
+};
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://harsh.bet"),
