@@ -299,8 +299,6 @@ export const tripDays: TripDay[] = [
         kind: "stay",
         mapQuery: "Dreamcatcher Bed and Breakfast, Taos, NM",
         locationName: "Dreamcatcher Bed & Breakfast",
-        locationDetail: "22 Wainscott Rd · breakfast and packing stop",
-        locationName: "Dreamcatcher Bed & Breakfast",
         locationDetail: "22 Wainscott Rd · check-in and altitude reset",
         href: "https://dreambb.com/plan-your-visit/",
         linkLabel: "Arrival details",
@@ -534,6 +532,8 @@ export const tripDays: TripDay[] = [
           "Aim to be fully packed by 10:30 AM. Confirm the property’s checkout time directly.",
         kind: "stay",
         mapQuery: "Dreamcatcher Bed and Breakfast, Taos, NM",
+        locationName: "Dreamcatcher Bed & Breakfast",
+        locationDetail: "22 Wainscott Rd · breakfast and packing stop",
       },
       {
         id: "0811-fechin",
