@@ -77,6 +77,22 @@ test("puts named road stops and cuisine choices directly in the schedule", async
   assert.match(planner, /August 15 needs a route choice/);
 });
 
+test("keeps every travel-day meal restaurant-first and vegetarian", async () => {
+  const data = await readFile(new URL("app/trip-data.ts", root), "utf8");
+
+  assert.doesNotMatch(data, /packed (vegetarian )?(meal|lunch|snack|breakfast)/i);
+  assert.doesNotMatch(data, /road meal|road lunch/i);
+  assert.match(data, /Vegetarian restaurant lunch/);
+  assert.match(data, /Plaza Grill · Las Vegas lunch/);
+  assert.match(data, /La Cueva Café · Taos lunch/);
+  assert.match(data, /Canyon dine-in vegetarian dinner/);
+  assert.match(data, /Early vegetarian dinner before the final leg/);
+  assert.match(data, /Bigg’s Pizza & More/);
+  assert.match(data, /Kaveri Indian Cuisine/);
+  assert.match(data, /Nikos Greek Gyros/);
+  assert.match(data, /Pepito’s Mexican Restaurante/);
+});
+
 test("keeps the site standalone and Pages-safe", async () => {
   const [config, workflow, layout, page, pinGate, packageJson] = await Promise.all([
     readFile(new URL("next.config.ts", root), "utf8"),
