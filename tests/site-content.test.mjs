@@ -33,7 +33,7 @@ test("keeps the food + attraction directory aligned with the trip's constraints"
   assert.match(data, /Masala & Curry/);
 });
 
-test("ships a richer, practical directory with map navigation and image assets", async () => {
+test("ships a richer, practical directory with map navigation", async () => {
   const [data, planner] = await Promise.all([
     readFile(new URL("app/trip-data.ts", root), "utf8"),
     readFile(new URL("app/TripPlanner.tsx", root), "utf8"),
@@ -50,12 +50,7 @@ test("ships a richer, practical directory with map navigation and image assets",
   assert.match(data, /Open drive route/);
   assert.match(planner, /routeHref\(activeDay\.route\)/);
   assert.match(planner, /Know before you go/);
-  assert.match(planner, /Illustrative roadbook art/);
   assert.match(planner, /https:\/\/www\.google\.com\/maps\/dir/);
-  await Promise.all([
-    access(new URL("public/images/roadbook/attractions-illustrative.webp", root)),
-    access(new URL("public/images/roadbook/food-illustrative.webp", root)),
-  ]);
 });
 
 test("puts named road stops and cuisine choices directly in the schedule", async () => {
@@ -93,7 +88,6 @@ test("keeps the site standalone and Pages-safe", async () => {
   ]);
 
   assert.match(config, /basePath: "\/trip"/);
-  assert.match(config, /NEXT_PUBLIC_BASE_PATH/);
   assert.match(workflow, /test ! -e out\/CNAME/);
   assert.match(layout, /index: false/);
   assert.match(layout, /canonical: "\/trip\/"/);

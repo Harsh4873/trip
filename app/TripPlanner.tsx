@@ -70,8 +70,6 @@ const dietaryLabels = {
   "confirm-lard": "Confirm lard",
 } as const;
 
-const publicBasePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
-
 function directionsHref(query: string) {
   return `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(query)}`;
 }
@@ -91,16 +89,6 @@ const coreRouteHref = routeHref({
 
 function placeDirectionsHref(place: Place) {
   return directionsHref(`${place.name}, ${place.city}`);
-}
-
-function roadbookImage(filename: string) {
-  return `${publicBasePath}/images/roadbook/${filename}`;
-}
-
-function placeImage(place: Place) {
-  return roadbookImage(
-    place.category === "food" ? "food-illustrative.webp" : "attractions-illustrative.webp",
-  );
 }
 
 function cleanSharedState(value: unknown): SharedTripState {
@@ -190,17 +178,10 @@ function CheckButton({
 
 function PlaceCard({ place }: { place: Place }) {
   const meta = [place.city, place.hours, place.cost, place.duration].filter(Boolean).join(" · ");
-  const image = placeImage(place);
   const backupPlace = place.backupPlaceId ? places.find((item) => item.id === place.backupPlaceId) : undefined;
 
   return (
     <article className={`place-card${place.closed ? " is-closed" : ""}`}>
-      {!place.closed && (
-        <figure className="place-card-media">
-          <img src={image} alt="" width={1672} height={941} loading="lazy" />
-          <figcaption>Illustrative roadbook art · not a venue photo</figcaption>
-        </figure>
-      )}
       <div className="place-top">
         <span className={`type-tag tag-${place.category}`}>
           {place.category === "food" ? <Utensils aria-hidden="true" /> : <Compass aria-hidden="true" />}
