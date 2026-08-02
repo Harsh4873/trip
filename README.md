@@ -7,8 +7,9 @@ A temporary, standalone trip planner for August 8–15, 2026. It is intentionall
 - the fixed dates, destinations, mileage, drive times, and lodging sequence from the original plan
 - a researched daily schedule with realistic stop, meal, check-in, rest, and weather buffers
 - vegetarian-only food guidance with an Indian-first focus
-- a single food + attraction directory searchable and filterable by place and trip day, with date-rigid closures (Harwood, Nambé Falls, the TEXAS musical, the Bandelier shuttle) called out on the affected entries
-- shared checklists with custom to-dos, trip-mode choices for Aug 13, fuel math, home-route meal options, and live-condition links
+- a source-linked food + attraction directory with 49 choices, category/day/area search, route directions, vegetarian confidence labels, weather-safe alternatives, and date-rigid closures (Harwood, Nambé Falls, the TEXAS musical, the Bandelier shuttle) called out on the affected entries
+- original roadbook illustrations for food and attractions, clearly labeled as illustrative rather than venue photography
+- day-specific “Know before you go” guidance, shared checklists with custom to-dos, trip-mode choices for Aug 13, fuel math, home-route meal options, and live-condition links
 - Firestore synchronization with browser/offline caching
 - `noindex` metadata because the site contains a future personal travel schedule
 
@@ -42,4 +43,4 @@ Firebase web configuration identifiers are public by design; Firestore rules are
 
 ## Research
 
-Attraction, restaurant, park, lodging, road, weather, and performance details were checked on July 15, 2026 against official operator, municipal, NPS, TPWD, NWS, and tourism sources. The interface links directly to the relevant sources and tells travelers which details must be reconfirmed near departure.
+Attraction, restaurant, park, lodging, road, weather, and performance details were checked on August 2, 2026 against official operator, municipal, NPS, TPWD, NWS, and tourism sources. The interface links directly to the relevant sources and tells travelers which details must be reconfirmed near departure.

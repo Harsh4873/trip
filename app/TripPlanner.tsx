@@ -33,6 +33,7 @@ import { FormEvent, KeyboardEvent, useEffect, useRef, useState } from "react";
 import {
   areas,
   checklistGroups,
+  dayTips,
   liveLinks,
   places,
   routeStops,
@@ -61,6 +62,46 @@ const tabs: { id: TabId; label: string; shortLabel: string; icon: typeof Calenda
   { id: "checklist", label: "Checklist", shortLabel: "Checklist", icon: ListChecks },
   { id: "info", label: "Trip info", shortLabel: "Trip info", icon: Route },
 ];
+
+const dietaryLabels = {
+  "vegetarian-first": "Vegetarian-first",
+  "vegan-options": "Vegan options",
+  "confirm-ghee": "Confirm ghee",
+  "confirm-lard": "Confirm lard",
+} as const;
+
+const publicBasePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
+
+function directionsHref(query: string) {
+  return `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(query)}`;
+}
+
+function routeHref(route: { origin?: string; destination: string; waypoints?: string[] }) {
+  const search = new URLSearchParams({ api: "1", destination: route.destination });
+  if (route.origin) search.set("origin", route.origin);
+  if (route.waypoints?.length) search.set("waypoints", route.waypoints.join("|"));
+  return `https://www.google.com/maps/dir/?${search.toString()}`;
+}
+
+const coreRouteHref = routeHref({
+  origin: "Lubbock, TX",
+  destination: "Palo Duro Canyon State Park, TX",
+  waypoints: ["Taos, NM", "Santa Fe, NM", "Albuquerque, NM"],
+});
+
+function placeDirectionsHref(place: Place) {
+  return directionsHref(`${place.name}, ${place.city}`);
+}
+
+function roadbookImage(filename: string) {
+  return `${publicBasePath}/images/roadbook/${filename}`;
+}
+
+function placeImage(place: Place) {
+  return roadbookImage(
+    place.category === "food" ? "food-illustrative.webp" : "attractions-illustrative.webp",
+  );
+}
 
 function cleanSharedState(value: unknown): SharedTripState {
   if (!value || typeof value !== "object") return EMPTY_STATE;
@@ -149,9 +190,17 @@ function CheckButton({
 
 function PlaceCard({ place }: { place: Place }) {
   const meta = [place.city, place.hours, place.cost, place.duration].filter(Boolean).join(" · ");
+  const image = placeImage(place);
+  const backupPlace = place.backupPlaceId ? places.find((item) => item.id === place.backupPlaceId) : undefined;
 
   return (
     <article className={`place-card${place.closed ? " is-closed" : ""}`}>
+      {!place.closed && (
+        <figure className="place-card-media">
+          <img src={image} alt="" width={1672} height={941} loading="lazy" />
+          <figcaption>Illustrative roadbook art · not a venue photo</figcaption>
+        </figure>
+      )}
       <div className="place-top">
         <span className={`type-tag tag-${place.category}`}>
           {place.category === "food" ? <Utensils aria-hidden="true" /> : <Compass aria-hidden="true" />}
@@ -175,11 +224,42 @@ function PlaceCard({ place }: { place: Place }) {
         </ul>
       )}
       <p className="place-note">{place.note}</p>
+      {(place.dietary || place.effort || place.amenities) && (
+        <div className="place-details" aria-label={`Helpful details for ${place.name}`}>
+          {place.dietary?.map((tag) => <span key={tag}>{dietaryLabels[tag]}</span>)}
+          {place.effort && <span>{place.effort}</span>}
+          {place.amenities?.map((amenity) => <span key={amenity}>{amenity}</span>)}
+        </div>
+      )}
+      {place.practicalTip && (
+        <p className="place-tip">
+          <strong>Helpful tip</strong>
+          {place.practicalTip}
+        </p>
+      )}
+      {backupPlace && !place.closed && (
+        <p className="backup-note">
+          <strong>Plan B</strong>
+          <a href={placeDirectionsHref(backupPlace)} target="_blank" rel="noreferrer">
+            {backupPlace.name} <Navigation aria-hidden="true" />
+          </a>
+        </p>
+      )}
       <div className="place-foot">
         {place.mustDo && <span className="must-badge">Don’t miss</span>}
+        {!place.closed && (
+          <a className="card-link" href={placeDirectionsHref(place)} target="_blank" rel="noreferrer">
+            Directions <Navigation aria-hidden="true" />
+          </a>
+        )}
         {place.href && (
           <a className="card-link" href={place.href} target="_blank" rel="noreferrer">
             Official info <ExternalLink aria-hidden="true" />
+          </a>
+        )}
+        {place.reservationHref && (
+          <a className="card-link" href={place.reservationHref} target="_blank" rel="noreferrer">
+            Find a reservation <ExternalLink aria-hidden="true" />
           </a>
         )}
       </div>
@@ -361,6 +441,7 @@ export default function TripPlanner() {
   const activeEvents = activeDay.events.filter(
     (event) => !event.mode || event.mode === dayThirteenMode,
   );
+  const activeTips = dayTips[activeDay.id] ?? [];
 
   const normalizedQuery = query.trim().toLowerCase();
   const filteredPlaces = places.filter((place) => {
@@ -376,6 +457,11 @@ export default function TripPlanner() {
         place.note,
         place.planned,
         ...(place.dishes ?? []),
+        ...(place.cuisine ?? []),
+        ...(place.dietary?.map((tag) => dietaryLabels[tag]) ?? []),
+        place.effort,
+        place.practicalTip,
+        ...(place.amenities ?? []),
       ]
         .join(" ")
         .toLowerCase();
@@ -516,10 +602,22 @@ export default function TripPlanner() {
                     {activeDay.weekday}, {activeDay.date}
                   </p>
                 </div>
-                <div className="route-chip">
-                  <span>{activeDay.from}</span>
-                  <ChevronRight aria-hidden="true" />
-                  <strong>{activeDay.to}</strong>
+                <div className="day-route-actions">
+                  <div className="route-chip">
+                    <span>{activeDay.from}</span>
+                    <ChevronRight aria-hidden="true" />
+                    <strong>{activeDay.to}</strong>
+                  </div>
+                  {activeDay.route && (
+                    <a
+                      className="route-action"
+                      href={routeHref(activeDay.route)}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      <Navigation aria-hidden="true" /> {activeDay.route.label}
+                    </a>
+                  )}
                 </div>
               </div>
 
@@ -571,6 +669,23 @@ export default function TripPlanner() {
                 </div>
               )}
 
+              {activeTips.length > 0 && (
+                <aside className="day-tips" aria-label={`Know before you go for ${activeDay.title}`}>
+                  <div className="day-tips-heading">
+                    <Compass aria-hidden="true" />
+                    <span>Know before you go</span>
+                  </div>
+                  <div className="day-tips-grid">
+                    {activeTips.map((tip) => (
+                      <p key={tip.title}>
+                        <strong>{tip.title}</strong>
+                        {tip.detail}
+                      </p>
+                    ))}
+                  </div>
+                </aside>
+              )}
+
               {activeDay.id === "aug-13" && (
                 <div className="mode-switch" aria-label="Choose the August 13 version">
                   <div>
@@ -596,9 +711,49 @@ export default function TripPlanner() {
                 </div>
               )}
 
+              {activeDay.id === "aug-15" && (
+                <div className="mode-switch" aria-label="Choose the August 15 home route">
+                  <div>
+                    <strong>August 15 needs a route choice</strong>
+                    <span>Home is not specified, so the named meal, fuel, and rest stops follow the corridor you select.</span>
+                  </div>
+                  <div>
+                    <button
+                      type="button"
+                      className={homeRoute === "abilene" ? "active" : ""}
+                      onClick={() => setHomeRoute("abilene")}
+                    >
+                      Via Abilene
+                    </button>
+                    <button
+                      type="button"
+                      className={homeRoute === "wichita" ? "active" : ""}
+                      onClick={() => setHomeRoute("wichita")}
+                    >
+                      Via Wichita Falls
+                    </button>
+                  </div>
+                </div>
+              )}
+
               <div className="timeline">
                 {activeEvents.map((event) => {
                   const isChecked = shared.checked.includes(event.id);
+                  const eventPlace = event.placeId
+                    ? places.find((place) => place.id === event.placeId)
+                    : undefined;
+                  const eventDirections = eventPlace
+                    ? placeDirectionsHref(eventPlace)
+                    : event.mapQuery
+                      ? directionsHref(event.mapQuery)
+                      : undefined;
+                  const eventLocationName =
+                    event.locationName ?? eventPlace?.name ?? (event.mapQuery ? event.title : undefined);
+                  const eventLocationDetail = event.locationDetail ?? eventPlace?.city;
+                  const scheduleOptions = (event.alternatives ?? []).filter(
+                    (option) =>
+                      !option.route || activeDay.id !== "aug-15" || option.route === homeRoute,
+                  );
                   return (
                     <div className={`timeline-row ${isChecked ? "completed" : ""}`} key={event.id}>
                       <div className={`timeline-icon kind-${event.kind}`}>
@@ -611,15 +766,67 @@ export default function TripPlanner() {
                         </div>
                         <h4>{event.title}</h4>
                         <p>{event.detail}</p>
-                        {(event.note || event.href) && (
+                        {eventDirections && eventLocationName && (
+                          <a
+                            className="timeline-location"
+                            href={eventDirections}
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            <MapPinned aria-hidden="true" />
+                            <span>
+                              <strong>{eventLocationName}</strong>
+                              {eventLocationDetail && <small>{eventLocationDetail}</small>}
+                            </span>
+                            <Navigation aria-hidden="true" />
+                          </a>
+                        )}
+                        {(event.note || event.href || eventDirections) && (
                           <div className="timeline-meta">
                             {event.note && <em>{event.note}</em>}
+                            {eventDirections && (
+                              <a href={eventDirections} target="_blank" rel="noreferrer">
+                                Directions <Navigation aria-hidden="true" />
+                              </a>
+                            )}
                             {event.href && (
                               <a href={event.href} target="_blank" rel="noreferrer">
                                 {event.linkLabel ?? "Source"} <ExternalLink aria-hidden="true" />
                               </a>
                             )}
                           </div>
+                        )}
+                        {scheduleOptions.length > 0 && (
+                          <aside className="timeline-options" aria-label={`Options for ${event.title}`}>
+                            <strong>{event.optionsLabel ?? "Named alternatives"}</strong>
+                            <div>
+                              {scheduleOptions.map((option) => (
+                                <div className="timeline-option" key={`${event.id}-${option.name}`}>
+                                  <a
+                                    href={directionsHref(option.mapQuery)}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                  >
+                                    <span>
+                                      <b>{option.name}</b>
+                                      <small>{option.detail}</small>
+                                    </span>
+                                    <Navigation aria-hidden="true" />
+                                  </a>
+                                  {option.href && (
+                                    <a
+                                      className="timeline-option-source"
+                                      href={option.href}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                    >
+                                      {option.linkLabel ?? "Info"} <ExternalLink aria-hidden="true" />
+                                    </a>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          </aside>
                         )}
                       </div>
                       <CheckButton
@@ -646,9 +853,9 @@ export default function TripPlanner() {
             <div className="panel-head">
               <h2>Food & attractions</h2>
               <p>
-                Everything on the trip, in one list. Every restaurant has real vegetarian
-                mains—Indian first, with Mexican and Italian backups. Ask about ghee when
-                avoiding dairy; confirm beans, rice, and chile are lard-free.
+                More than a directory: find the main plan, weather-safe alternatives, vegetarian
+                backups, map directions, official links, and practical reminders. Ask about ghee
+                when avoiding dairy; confirm beans, rice, and chile are lard-free.
               </p>
             </div>
 
@@ -884,7 +1091,12 @@ export default function TripPlanner() {
             </div>
 
             <div className="route-board">
-              <h3>1,952 miles · 30 hr 11 min driving</h3>
+              <div className="route-board-head">
+                <h3>1,952 miles · 30 hr 11 min driving</h3>
+                <a href={coreRouteHref} target="_blank" rel="noreferrer">
+                  <Navigation aria-hidden="true" /> Open core route
+                </a>
+              </div>
               <ol className="route-list">
                 {routeStops.map((stop, index) => (
                   <li key={`${stop.place}-${index}`}>
@@ -997,6 +1209,9 @@ export default function TripPlanner() {
                         Official site <ExternalLink aria-hidden="true" />
                       </a>
                     )}
+                    <a href={placeDirectionsHref(homeMeal)} target="_blank" rel="noreferrer">
+                      Directions <Navigation aria-hidden="true" />
+                    </a>
                   </div>
                 )}
               </article>
@@ -1019,7 +1234,7 @@ export default function TripPlanner() {
               <div className="live-tools-copy">
                 <h3>Open these on travel mornings</h3>
                 <p>
-                  Research is current as of July 15, 2026. These links are the final word when
+                  Research is current as of August 2, 2026. These links are the final word when
                   conditions change.
                 </p>
               </div>
@@ -1041,7 +1256,7 @@ export default function TripPlanner() {
 
       <footer>
         <p>
-          <strong>New Mexico road trip · Aug 8–15, 2026.</strong> Research last checked July 15,
+          <strong>New Mexico road trip · Aug 8–15, 2026.</strong> Research last checked August 2,
           2026—reconfirm hours, closures, tickets, weather, and road conditions before each day.
         </p>
       </footer>

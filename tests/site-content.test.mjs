@@ -33,6 +33,55 @@ test("keeps the food + attraction directory aligned with the trip's constraints"
   assert.match(data, /Masala & Curry/);
 });
 
+test("ships a richer, practical directory with map navigation and image assets", async () => {
+  const [data, planner] = await Promise.all([
+    readFile(new URL("app/trip-data.ts", root), "utf8"),
+    readFile(new URL("app/TripPlanner.tsx", root), "utf8"),
+  ]);
+
+  assert.match(data, /export const dayTips/);
+  assert.match(data, /Mirch Masala/);
+  assert.match(data, /Sweetwater Harvest Kitchen/);
+  assert.match(data, /Itality Plant Based Foods/);
+  assert.match(data, /Yellow City Street Food/);
+  assert.match(data, /Museum of North Texas History/);
+  assert.ok((data.match(/category: "food"/g) ?? []).length >= 21);
+  assert.ok((data.match(/category: "attraction"/g) ?? []).length >= 26);
+  assert.match(data, /Open drive route/);
+  assert.match(planner, /routeHref\(activeDay\.route\)/);
+  assert.match(planner, /Know before you go/);
+  assert.match(planner, /Illustrative roadbook art/);
+  assert.match(planner, /https:\/\/www\.google\.com\/maps\/dir/);
+  await Promise.all([
+    access(new URL("public/images/roadbook/attractions-illustrative.webp", root)),
+    access(new URL("public/images/roadbook/food-illustrative.webp", root)),
+  ]);
+});
+
+test("puts named road stops and cuisine choices directly in the schedule", async () => {
+  const [data, planner] = await Promise.all([
+    readFile(new URL("app/trip-data.ts", root), "utf8"),
+    readFile(new URL("app/TripPlanner.tsx", root), "utf8"),
+  ]);
+
+  assert.match(data, /export type ScheduleOption/);
+  assert.match(data, /Buc-ee’s · Amarillo/);
+  assert.match(data, /Love’s Travel Stop · Santa Rosa #285/);
+  assert.match(data, /Pilot Travel Center · Clovis #1118/);
+  assert.match(data, /Love’s Travel Stop · Las Vegas #733/);
+  assert.match(data, /Flying J Travel Center · Abilene/);
+  assert.match(data, /Wichita County Safety Rest Area/);
+  assert.match(data, /Other cuisines for arrival night/);
+  assert.match(data, /Mediterranean/);
+  assert.match(data, /Italian/);
+  assert.match(data, /Mexican/);
+  assert.match(data, /route: "abilene"/);
+  assert.match(data, /route: "wichita"/);
+  assert.match(planner, /timeline-location/);
+  assert.match(planner, /timeline-options/);
+  assert.match(planner, /August 15 needs a route choice/);
+});
+
 test("keeps the site standalone and Pages-safe", async () => {
   const [config, workflow, layout, page, pinGate, packageJson] = await Promise.all([
     readFile(new URL("next.config.ts", root), "utf8"),
@@ -44,6 +93,7 @@ test("keeps the site standalone and Pages-safe", async () => {
   ]);
 
   assert.match(config, /basePath: "\/trip"/);
+  assert.match(config, /NEXT_PUBLIC_BASE_PATH/);
   assert.match(workflow, /test ! -e out\/CNAME/);
   assert.match(layout, /index: false/);
   assert.match(layout, /canonical: "\/trip\/"/);
