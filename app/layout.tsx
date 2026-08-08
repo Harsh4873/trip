@@ -21,8 +21,9 @@ export const metadata: Metadata = {
     ],
     apple: "/trip/apple-touch-icon.png",
   },
+  // The manifest's display:standalone replaces the deprecated
+  // apple-mobile-web-app-capable tag (iOS honors the manifest since 16.4).
   appleWebApp: {
-    capable: true,
     title: "Roadbook",
     statusBarStyle: "default",
   },

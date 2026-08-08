@@ -883,18 +883,12 @@ body.focus-locked { overflow: hidden; }
   display: flex;
   flex-direction: column;
   touch-action: pan-y;
-  transition: transform 0.24s ease, opacity 0.24s ease;
+  /* Slight overshoot reads as a spring on snap-back and card promotion. */
+  transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.24s ease;
   will-change: transform;
 }
 .focus-card.is-top { cursor: grab; }
-.focus-card.leave-done {
-  transform: translateX(-140%) rotate(-16deg) !important;
-  opacity: 0;
-}
-.focus-card.leave-later {
-  transform: translateX(140%) rotate(16deg) !important;
-  opacity: 0;
-}
+.focus-card.is-dragging { cursor: grabbing; }
 .focus-card-media {
   position: relative;
   flex: 0 0 clamp(150px, 30%, 240px);
@@ -1016,6 +1010,125 @@ body.focus-locked { overflow: hidden; }
   background: var(--accent-strong);
   color: white;
   font-weight: 700;
+}
+.focus-empty-badge {
+  animation: pop-in 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+@keyframes pop-in {
+  from { transform: scale(0.4); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+
+.focus-snack {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: calc(104px + env(safe-area-inset-bottom));
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  max-width: min(92%, 420px);
+  padding: 11px 16px;
+  border-radius: var(--radius-md);
+  background: var(--ink);
+  color: var(--bg);
+  font-size: 13.5px;
+  box-shadow: 0 8px 26px rgba(10, 14, 10, 0.35);
+  animation: snack-in 0.22s ease-out;
+}
+.focus-snack span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.focus-snack button {
+  flex: 0 0 auto;
+  border: 0;
+  background: none;
+  padding: 4px 2px;
+  color: var(--sun);
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-size: 12.5px;
+}
+@keyframes snack-in {
+  from { transform: translate(-50%, 12px); opacity: 0; }
+  to { transform: translate(-50%, 0); opacity: 1; }
+}
+
+/* ——— Day progress + Up next ——— */
+
+.day-progress {
+  padding: 10px 24px 12px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border-bottom: 1px solid var(--line);
+}
+.day-progress-track {
+  flex: 1;
+  display: flex;
+  gap: 3px;
+}
+.day-progress-track i {
+  flex: 1;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--line);
+}
+.day-progress-track i.filled { background: var(--accent-strong); }
+.day-progress > span { color: var(--muted); font-size: 12.5px; font-weight: 600; white-space: nowrap; }
+.focus-head .day-progress-track { margin-top: 8px; max-width: 300px; }
+
+.next-pill,
+.next-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 9px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.next-pill::before,
+.next-chip::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: next-pulse 2s ease-out infinite;
+}
+@keyframes next-pulse {
+  0% { box-shadow: 0 0 0 0 var(--ring); }
+  70% { box-shadow: 0 0 0 6px transparent; }
+  100% { box-shadow: 0 0 0 0 transparent; }
+}
+.next-chip {
+  position: absolute;
+  bottom: 10px;
+  left: 10px;
+  background: rgba(16, 20, 16, 0.55);
+  color: #b7e4c8;
+}
+.next-chip::before { background: #b7e4c8; }
+.timeline-row.is-next .timeline-time { color: var(--terra); }
+.event-card.is-next { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent), var(--shadow); }
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 
 /* ——— Food & attractions ——— */
@@ -1847,6 +1960,7 @@ footer strong { color: var(--ink); }
   .day-route-actions { width: 100%; justify-items: start; }
   .day-summary { padding: 14px 18px; }
   .day-conditions { padding: 12px 18px; gap: 7px 14px; }
+  .day-progress { padding: 10px 18px 12px; }
   .advisory, .mode-switch, .day-tips { margin-inline: 18px; }
   .event-deck-wrap { padding: 14px 12px 16px; }
   .event-deck { grid-auto-columns: 88%; }
