@@ -23,6 +23,7 @@ import {
   Gauge,
   ListChecks,
   MapPinned,
+  Maximize2,
   Minus,
   MoonStar,
   Navigation,
@@ -58,6 +59,8 @@ import {
   type PlaceCategory,
 } from "./trip-data";
 import RouteMap from "./RouteMap";
+import FocusDeck from "./FocusDeck";
+import { directionsHref, placeDirectionsHref, routeHref } from "./maps";
 import { placeImages } from "./place-images";
 import {
   dayAlmanacs,
@@ -121,26 +124,11 @@ const dietaryLabels = {
   "confirm-lard": "Confirm lard",
 } as const;
 
-function directionsHref(query: string) {
-  return `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(query)}`;
-}
-
-function routeHref(route: { origin?: string; destination: string; waypoints?: string[] }) {
-  const search = new URLSearchParams({ api: "1", destination: route.destination });
-  if (route.origin) search.set("origin", route.origin);
-  if (route.waypoints?.length) search.set("waypoints", route.waypoints.join("|"));
-  return `https://www.google.com/maps/dir/?${search.toString()}`;
-}
-
 const coreRouteHref = routeHref({
   origin: "Lubbock, TX",
   destination: "Palo Duro Canyon State Park, TX",
   waypoints: ["Taos, NM", "Santa Fe, NM", "Albuquerque, NM"],
 });
-
-function placeDirectionsHref(place: Place) {
-  return directionsHref(`${place.name}, ${place.city}`);
-}
 
 function cleanSharedState(value: unknown): SharedTripState {
   if (!value || typeof value !== "object") return EMPTY_STATE;
@@ -311,6 +299,7 @@ export default function TripPlanner() {
   const [activeTab, setActiveTab] = useState<TabId>("plan");
   const [selectedDay, setSelectedDay] = useState(0);
   const [planView, setPlanView] = useState<"cards" | "list">("cards");
+  const [focusOpen, setFocusOpen] = useState(false);
   const [dayThirteenMode, setDayThirteenMode] = useState<"relaxed" | "falls">("relaxed");
   const [query, setQuery] = useState("");
   const [kindFilter, setKindFilter] = useState<PlaceCategory | "all">("all");
@@ -339,11 +328,7 @@ export default function TripPlanner() {
   const lastRemoteKey = useRef("");
   const dayPickerRef = useRef<HTMLDivElement | null>(null);
   const deckRef = useRef<HTMLDivElement | null>(null);
-
-  // A fresh day (or a view switch) starts the card deck at its first event.
-  useEffect(() => {
-    deckRef.current?.scrollTo({ left: 0 });
-  }, [selectedDay, planView, dayThirteenMode]);
+  const upNextIndexRef = useRef(0);
 
   const nudgeDeck = (direction: -1 | 1) => {
     const deck = deckRef.current;
@@ -568,6 +553,33 @@ export default function TripPlanner() {
       ? (dayAlmanacs.find((entry) => entry.dayId === tripDays[clock.dayIndex].id)?.stopId ?? null)
       : null;
   const activeTips = dayTips[activeDay.id] ?? [];
+  // Calendar-style "now" affordance: on today's card, the first unchecked
+  // event is Up next. Other days stay neutral.
+  const upNextId =
+    clock && clock.dayIndex === selectedDay
+      ? (activeEvents.find((event) => !shared.checked.includes(event.id))?.id ?? null)
+      : null;
+  const dayDoneCount = activeEvents.filter((event) => shared.checked.includes(event.id)).length;
+  const upNextIndex = Math.max(
+    0,
+    activeEvents.findIndex((event) => event.id === upNextId),
+  );
+  // Latest-value ref so the deck-scroll effect can read it without re-running
+  // (and yanking the scroll) every time an event gets checked off. Defined
+  // before the scroll effect so it updates first on a day change.
+  useEffect(() => {
+    upNextIndexRef.current = upNextIndex;
+  });
+
+  // A fresh day (or a view switch) opens the card deck at the Up-next event
+  // on today's card ("here I am right now"), or the first event otherwise.
+  useEffect(() => {
+    const deck = deckRef.current;
+    if (!deck) return;
+    const card = deck.querySelector<HTMLElement>(".event-card");
+    const target = card ? upNextIndexRef.current * (card.offsetWidth + 14) : 0;
+    deck.scrollTo({ left: target });
+  }, [selectedDay, planView, dayThirteenMode]);
   // Shared enrichment for both schedule views (list rows and swipe cards).
   const enrichedEvents = activeEvents.map((event) => {
     const place = event.placeId ? places.find((item) => item.id === event.placeId) : undefined;
@@ -893,6 +905,20 @@ export default function TripPlanner() {
                 </div>
               )}
 
+              <div className="day-progress" aria-label="Progress through this day">
+                <div className="day-progress-track">
+                  {activeEvents.map((event) => (
+                    <i
+                      key={event.id}
+                      className={shared.checked.includes(event.id) ? "filled" : ""}
+                    />
+                  ))}
+                </div>
+                <span>
+                  {dayDoneCount} of {activeEvents.length} done
+                </span>
+              </div>
+
               {activeDay.advisory && (
                 <div className="advisory">
                   <ShieldAlert aria-hidden="true" />
@@ -986,10 +1012,25 @@ export default function TripPlanner() {
                         const isChecked = shared.checked.includes(event.id);
                         return (
                           <article
-                            className={`event-card ${isChecked ? "completed" : ""}`}
+                            className={`event-card ${isChecked ? "completed" : ""}${event.id === upNextId ? " is-next" : ""}`}
                             key={event.id}
                           >
-                            <div className={`event-card-media kind-${event.kind}`}>
+                            <div
+                              className={`event-card-media kind-${event.kind}`}
+                              role="button"
+                              tabIndex={0}
+                              aria-label={`Open ${event.title} in the full-screen swipe deck`}
+                              onClick={(clickEvent) => {
+                                if ((clickEvent.target as HTMLElement).closest("button, a")) return;
+                                setFocusOpen(true);
+                              }}
+                              onKeyDown={(keyEvent) => {
+                                if (keyEvent.key === "Enter" || keyEvent.key === " ") {
+                                  keyEvent.preventDefault();
+                                  setFocusOpen(true);
+                                }
+                              }}
+                            >
                               {image ? (
                                 // eslint-disable-next-line @next/next/no-img-element -- static export uses relative public/ paths; next/image adds nothing here
                                 <img src={image.src} alt={image.alt} loading="lazy" />
@@ -999,6 +1040,9 @@ export default function TripPlanner() {
                               <span className="event-card-step">
                                 {index + 1} / {enrichedEvents.length}
                               </span>
+                              {event.id === upNextId && (
+                                <span className="next-chip">Up next</span>
+                              )}
                               {image && <span className="event-card-credit">{image.credit}</span>}
                               <CheckButton
                                 id={event.id}
@@ -1090,9 +1134,14 @@ export default function TripPlanner() {
                     >
                       <ChevronLeft aria-hidden="true" />
                     </button>
-                    <span>
-                      Swipe or use the arrows · {enrichedEvents.length} stops on this day
-                    </span>
+                    <button
+                      type="button"
+                      className="focus-launch"
+                      onClick={() => setFocusOpen(true)}
+                    >
+                      <Maximize2 aria-hidden="true" /> Full-screen swipe mode ·{" "}
+                      {enrichedEvents.length} stops
+                    </button>
                     <button type="button" onClick={() => nudgeDeck(1)} aria-label="Next event card">
                       <ChevronRight aria-hidden="true" />
                     </button>
@@ -1105,7 +1154,7 @@ export default function TripPlanner() {
                       const isChecked = shared.checked.includes(event.id);
                       return (
                         <div
-                          className={`timeline-row ${isChecked ? "completed" : ""}`}
+                          className={`timeline-row ${isChecked ? "completed" : ""}${event.id === upNextId ? " is-next" : ""}`}
                           key={event.id}
                         >
                           <div className={`timeline-icon kind-${event.kind}`}>
@@ -1117,6 +1166,7 @@ export default function TripPlanner() {
                               {event.duration && (
                                 <span className="timeline-duration">{event.duration}</span>
                               )}
+                              {event.id === upNextId && <span className="next-pill">Up next</span>}
                             </div>
                             <h4>{event.title}</h4>
                             <p>{event.detail}</p>
@@ -1945,6 +1995,16 @@ export default function TripPlanner() {
           </section>
         )}
       </main>
+
+      {focusOpen && (
+        <FocusDeck
+          day={activeDay}
+          events={enrichedEvents}
+          checkedIds={shared.checked}
+          onToggleChecked={toggleChecked}
+          onClose={() => setFocusOpen(false)}
+        />
+      )}
 
       <footer>
         <p>
