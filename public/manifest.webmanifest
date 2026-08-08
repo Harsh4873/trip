@@ -1,0 +1,17 @@
+{
+  "name": "New Mexico Roadbook",
+  "short_name": "Roadbook",
+  "description": "Private day-by-day roadbook for the Aug 8–15, 2026 New Mexico trip.",
+  "id": "/trip/",
+  "start_url": "/trip/",
+  "scope": "/trip/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f6f4ee",
+  "theme_color": "#1c5138",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
