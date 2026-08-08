@@ -23,6 +23,7 @@ import {
   Gauge,
   ListChecks,
   MapPinned,
+  Maximize2,
   Minus,
   MoonStar,
   Navigation,
@@ -58,6 +59,8 @@ import {
   type PlaceCategory,
 } from "./trip-data";
 import RouteMap from "./RouteMap";
+import FocusDeck from "./FocusDeck";
+import { directionsHref, placeDirectionsHref, routeHref } from "./maps";
 import { placeImages } from "./place-images";
 import {
   dayAlmanacs,
@@ -121,26 +124,11 @@ const dietaryLabels = {
   "confirm-lard": "Confirm lard",
 } as const;
 
-function directionsHref(query: string) {
-  return `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(query)}`;
-}
-
-function routeHref(route: { origin?: string; destination: string; waypoints?: string[] }) {
-  const search = new URLSearchParams({ api: "1", destination: route.destination });
-  if (route.origin) search.set("origin", route.origin);
-  if (route.waypoints?.length) search.set("waypoints", route.waypoints.join("|"));
-  return `https://www.google.com/maps/dir/?${search.toString()}`;
-}
-
 const coreRouteHref = routeHref({
   origin: "Lubbock, TX",
   destination: "Palo Duro Canyon State Park, TX",
   waypoints: ["Taos, NM", "Santa Fe, NM", "Albuquerque, NM"],
 });
-
-function placeDirectionsHref(place: Place) {
-  return directionsHref(`${place.name}, ${place.city}`);
-}
 
 function cleanSharedState(value: unknown): SharedTripState {
   if (!value || typeof value !== "object") return EMPTY_STATE;
@@ -311,6 +299,7 @@ export default function TripPlanner() {
   const [activeTab, setActiveTab] = useState<TabId>("plan");
   const [selectedDay, setSelectedDay] = useState(0);
   const [planView, setPlanView] = useState<"cards" | "list">("cards");
+  const [focusOpen, setFocusOpen] = useState(false);
   const [dayThirteenMode, setDayThirteenMode] = useState<"relaxed" | "falls">("relaxed");
   const [query, setQuery] = useState("");
   const [kindFilter, setKindFilter] = useState<PlaceCategory | "all">("all");
@@ -989,7 +978,22 @@ export default function TripPlanner() {
                             className={`event-card ${isChecked ? "completed" : ""}`}
                             key={event.id}
                           >
-                            <div className={`event-card-media kind-${event.kind}`}>
+                            <div
+                              className={`event-card-media kind-${event.kind}`}
+                              role="button"
+                              tabIndex={0}
+                              aria-label={`Open ${event.title} in the full-screen swipe deck`}
+                              onClick={(clickEvent) => {
+                                if ((clickEvent.target as HTMLElement).closest("button, a")) return;
+                                setFocusOpen(true);
+                              }}
+                              onKeyDown={(keyEvent) => {
+                                if (keyEvent.key === "Enter" || keyEvent.key === " ") {
+                                  keyEvent.preventDefault();
+                                  setFocusOpen(true);
+                                }
+                              }}
+                            >
                               {image ? (
                                 // eslint-disable-next-line @next/next/no-img-element -- static export uses relative public/ paths; next/image adds nothing here
                                 <img src={image.src} alt={image.alt} loading="lazy" />
@@ -1090,9 +1094,14 @@ export default function TripPlanner() {
                     >
                       <ChevronLeft aria-hidden="true" />
                     </button>
-                    <span>
-                      Swipe or use the arrows · {enrichedEvents.length} stops on this day
-                    </span>
+                    <button
+                      type="button"
+                      className="focus-launch"
+                      onClick={() => setFocusOpen(true)}
+                    >
+                      <Maximize2 aria-hidden="true" /> Full-screen swipe mode ·{" "}
+                      {enrichedEvents.length} stops
+                    </button>
                     <button type="button" onClick={() => nudgeDeck(1)} aria-label="Next event card">
                       <ChevronRight aria-hidden="true" />
                     </button>
@@ -1945,6 +1954,16 @@ export default function TripPlanner() {
           </section>
         )}
       </main>
+
+      {focusOpen && (
+        <FocusDeck
+          day={activeDay}
+          events={enrichedEvents}
+          checkedIds={shared.checked}
+          onToggleChecked={toggleChecked}
+          onClose={() => setFocusOpen(false)}
+        />
+      )}
 
       <footer>
         <p>

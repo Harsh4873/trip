@@ -80,9 +80,10 @@ test("keeps the event research in the directory", async () => {
 });
 
 test("ships a richer, practical directory with map navigation", async () => {
-  const [data, planner] = await Promise.all([
+  const [data, planner, maps] = await Promise.all([
     readFile(new URL("app/trip-data.ts", root), "utf8"),
     readFile(new URL("app/TripPlanner.tsx", root), "utf8"),
+    readFile(new URL("app/maps.ts", root), "utf8"),
   ]);
 
   assert.match(data, /export const dayTips/);
@@ -96,7 +97,7 @@ test("ships a richer, practical directory with map navigation", async () => {
   assert.match(data, /Open drive route/);
   assert.match(planner, /routeHref\(activeDay\.route\)/);
   assert.match(planner, /Know before you go/);
-  assert.match(planner, /https:\/\/www\.google\.com\/maps\/dir/);
+  assert.match(maps, /https:\/\/www\.google\.com\/maps\/dir/);
 });
 
 test("puts named road stops and cuisine choices directly in the schedule", async () => {
@@ -163,6 +164,24 @@ test("keeps the schedule route-verified and visual", async () => {
   assert.match(planner, /placeImages/);
   assert.match(images, /taos-pueblo/);
   assert.match(images, /CC BY/);
+});
+
+test("ships the full-screen swipe deck", async () => {
+  const [deck, planner] = await Promise.all([
+    readFile(new URL("app/FocusDeck.tsx", root), "utf8"),
+    readFile(new URL("app/TripPlanner.tsx", root), "utf8"),
+  ]);
+
+  // Swipe left marks the shared checklist; swipe right cycles to the bottom.
+  assert.match(deck, /commit\(topId, "done"\)/);
+  assert.match(deck, /commit\(topId, "later"\)/);
+  assert.match(deck, /onToggleChecked\(id\)/);
+  assert.match(deck, /current\.slice\(1\), current\[0\]/);
+  // Horizontal-intent drag that still allows vertical scrolling in the card.
+  assert.match(deck, /setPointerCapture/);
+  // Entry points: the launch button and tapping a card's photo.
+  assert.match(planner, /focus-launch/);
+  assert.match(planner, /<FocusDeck/);
 });
 
 test("keeps the site standalone and Pages-safe", async () => {

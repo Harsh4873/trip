@@ -808,6 +808,215 @@ body.access-locked { overflow: hidden; }
 .deck-controls button svg { width: 18px; height: 18px; }
 .deck-controls button:hover { border-color: var(--accent); color: var(--accent); }
 .deck-controls span { color: var(--muted); font-size: 12.5px; text-align: center; }
+.focus-launch {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 42px;
+  padding: 0 16px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--card);
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 700;
+}
+.focus-launch svg { width: 15px; height: 15px; }
+.focus-launch:hover { border-color: var(--accent); }
+.event-card-media[role="button"] { cursor: pointer; }
+
+/* ——— Full-screen focus deck ——— */
+
+body.focus-locked { overflow: hidden; }
+
+.focus-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom)
+    env(safe-area-inset-left);
+}
+.focus-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 18px 10px;
+}
+.focus-head strong { display: block; font-size: 15px; }
+.focus-head span { display: block; margin-top: 2px; color: var(--muted); font-size: 12.5px; }
+.focus-close {
+  flex: 0 0 auto;
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  border: 1px solid var(--line);
+  background: var(--card);
+  display: grid;
+  place-items: center;
+}
+.focus-close svg { width: 18px; height: 18px; }
+.focus-close:hover { border-color: var(--terra); color: var(--terra); }
+
+.focus-stage {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  place-items: center;
+  padding: 6px 16px 10px;
+}
+.focus-card {
+  position: absolute;
+  inset: 6px 0 10px;
+  margin: 0 auto;
+  width: min(100%, 430px);
+  max-height: 100%;
+  border-radius: 22px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  box-shadow: 0 18px 50px rgba(10, 14, 10, 0.28);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  touch-action: pan-y;
+  transition: transform 0.24s ease, opacity 0.24s ease;
+  will-change: transform;
+}
+.focus-card.is-top { cursor: grab; }
+.focus-card.leave-done {
+  transform: translateX(-140%) rotate(-16deg) !important;
+  opacity: 0;
+}
+.focus-card.leave-later {
+  transform: translateX(140%) rotate(16deg) !important;
+  opacity: 0;
+}
+.focus-card-media {
+  position: relative;
+  flex: 0 0 clamp(150px, 30%, 240px);
+  display: grid;
+  place-items: center;
+  color: white;
+  overflow: hidden;
+}
+.focus-card-media img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  user-select: none;
+}
+.focus-time {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  padding: 4px 11px;
+  border-radius: 999px;
+  background: rgba(16, 20, 16, 0.55);
+  color: white;
+  font-size: 12px;
+  font-weight: 700;
+}
+.focus-stamp {
+  position: absolute;
+  top: 16px;
+  padding: 6px 14px;
+  border: 3px solid;
+  border-radius: 10px;
+  font-size: 20px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  opacity: 0;
+  pointer-events: none;
+  background: rgba(16, 20, 16, 0.35);
+}
+.stamp-done {
+  right: 16px;
+  color: #7ee2a8;
+  border-color: #7ee2a8;
+  transform: rotate(12deg);
+}
+.stamp-later {
+  left: 16px;
+  color: #f0b862;
+  border-color: #f0b862;
+  transform: rotate(-12deg);
+}
+.focus-card-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 16px 18px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.focus-card-body h3 { margin: 0; font-size: 20px; line-height: 1.25; }
+.focus-card-body > p { margin: 0; color: var(--muted); font-size: 14.5px; }
+.focus-card-body .timeline-duration { align-self: flex-start; }
+
+.focus-actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 22px;
+  padding: 10px 18px calc(16px + env(safe-area-inset-bottom));
+}
+.focus-actions button {
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  min-width: 84px;
+  padding: 12px 18px;
+  border-radius: 18px;
+  border: 1px solid var(--line);
+  background: var(--card);
+  font-size: 12.5px;
+  font-weight: 700;
+}
+.focus-actions button svg { width: 22px; height: 22px; }
+.focus-done { color: var(--accent); }
+.focus-done:hover { border-color: var(--accent); }
+.focus-later { color: var(--amber-ink); }
+.focus-later:hover { border-color: var(--amber-ink); }
+.focus-count { color: var(--muted); font-size: 12.5px; font-weight: 600; }
+
+.focus-empty {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  max-width: 40ch;
+  text-align: center;
+  padding: 20px;
+}
+.focus-empty-badge {
+  width: 58px;
+  height: 58px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--accent-strong);
+  color: white;
+}
+.focus-empty-badge svg { width: 26px; height: 26px; }
+.focus-empty strong { font-size: 18px; }
+.focus-empty p { margin: 0; color: var(--muted); font-size: 14px; }
+.focus-empty button {
+  margin-top: 6px;
+  min-height: 44px;
+  padding: 0 20px;
+  border-radius: 999px;
+  border: 0;
+  background: var(--accent-strong);
+  color: white;
+  font-weight: 700;
+}
 
 /* ——— Food & attractions ——— */
 
