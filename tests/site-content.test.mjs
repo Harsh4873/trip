@@ -33,6 +33,52 @@ test("keeps the food + attraction directory aligned with the trip's constraints"
   assert.match(data, /Masala & Curry/);
 });
 
+test("documents the researched weather, sun, and sky data", async () => {
+  const [almanac, weather, planner] = await Promise.all([
+    readFile(new URL("app/almanac-data.ts", root), "utf8"),
+    readFile(new URL("app/weather.ts", root), "utf8"),
+    readFile(new URL("app/TripPlanner.tsx", root), "utf8"),
+  ]);
+
+  // NOAA 1991-2020 normals for every stop, including the canyon-floor caveat.
+  assert.match(almanac, /NOAA\/NCEI 1991–2020/);
+  assert.match(almanac, /augHighF: 84/); // Taos
+  assert.match(almanac, /augHighF: 97/); // Palo Duro canyon floor
+  assert.match(almanac, /TXZ317/); // canyon-specific NWS forecast zone
+  // USNO-verified sun times at the trip's endpoints.
+  assert.match(almanac, /7:05 AM CDT/);
+  assert.match(almanac, /8:36 PM CDT/);
+  // The moonless 2026 Perseid peak is the sky headline.
+  assert.match(almanac, /New moon/);
+  assert.match(almanac, /moonless Perseid maximum since 2018/);
+
+  // Live data comes only from keyless, CORS-open government/free APIs.
+  assert.match(weather, /api\.open-meteo\.com/);
+  assert.match(weather, /api\.weather\.gov/);
+  assert.match(weather, /forecast_days: "16"/);
+
+  // The planner surfaces the Weather & sky tab and per-day conditions.
+  assert.match(planner, /weather-panel/);
+  assert.match(planner, /day-conditions/);
+  assert.match(planner, /loadForecasts/);
+  assert.match(planner, /loadAlerts/);
+});
+
+test("keeps the event research in the directory", async () => {
+  const data = await readFile(new URL("app/trip-data.ts", root), "utf8");
+
+  // Verified 2026 event findings.
+  assert.match(data, /SWAIA Santa Fe Indian Market/);
+  assert.match(data, /Aug 15–16/);
+  assert.match(data, /San Lorenzo Feast Day · Picuris Pueblo/);
+  assert.match(data, /Santa Fe Farmers' Market/);
+  assert.match(data, /Meow Wolf/);
+  // Resolved research questions stay resolved.
+  assert.match(data, /Daily 9 AM–4 PM self-guided/); // Earthship
+  assert.match(data, /annual closure starts Aug 20/); // Taos Pueblo
+  assert.match(data, /Perseid peak with zero moonlight/);
+});
+
 test("ships a richer, practical directory with map navigation", async () => {
   const [data, planner] = await Promise.all([
     readFile(new URL("app/trip-data.ts", root), "utf8"),
@@ -91,6 +137,32 @@ test("keeps every travel-day meal restaurant-first and vegetarian", async () => 
   assert.match(data, /Kaveri Indian Cuisine/);
   assert.match(data, /Nikos Greek Gyros/);
   assert.match(data, /Pepito’s Mexican Restaurante/);
+});
+
+test("keeps the schedule route-verified and visual", async () => {
+  const [data, planner, images] = await Promise.all([
+    readFile(new URL("app/trip-data.ts", root), "utf8"),
+    readFile(new URL("app/TripPlanner.tsx", root), "utf8"),
+    readFile(new URL("app/place-images.ts", root), "utf8"),
+  ]);
+
+  // Verified lodging: Homewood Suites, not the old Hampton Inn guess.
+  assert.match(data, /Homewood Suites by Hilton Lubbock, 5320 W Loop 289/);
+  assert.doesNotMatch(data, /Hampton Inn/);
+  // Day-1 stops sit on the real Houston corridors (no Dallas-direction detour).
+  assert.match(data, /Buc-ee’s · Bastrop/);
+  assert.match(data, /Buc-ee’s · Waller/);
+  assert.doesNotMatch(data, /Hillsboro/);
+  // On-route alternative for the east-Amarillo Buc-ee's detour.
+  assert.match(data, /Russell's Truck & Travel Center · Glenrio/);
+  // The verified-shorter Wichita Falls corridor is the return default.
+  assert.match(planner, /useState<"abilene" \| "wichita">\("wichita"\)/);
+  // Swipe-card schedule view with photos and a nested options swiper.
+  assert.match(planner, /event-deck/);
+  assert.match(planner, /option-swiper/);
+  assert.match(planner, /placeImages/);
+  assert.match(images, /taos-pueblo/);
+  assert.match(images, /CC BY/);
 });
 
 test("keeps the site standalone and Pages-safe", async () => {

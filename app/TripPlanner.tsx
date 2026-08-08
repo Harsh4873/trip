@@ -6,25 +6,39 @@ import {
   CalendarDays,
   Check,
   CheckCircle2,
+  ChevronLeft,
   ChevronRight,
   Circle,
   Clock3,
+  Cloud,
+  CloudFog,
+  CloudLightning,
+  CloudRain,
+  CloudSnow,
+  CloudSun,
   Coffee,
   Compass,
+  Droplets,
   ExternalLink,
-  Fuel,
   Gauge,
   ListChecks,
   MapPinned,
   Minus,
+  MoonStar,
   Navigation,
   Plus,
   RefreshCw,
   Route,
   Search,
   ShieldAlert,
+  Sparkles,
+  Sun,
+  Sunrise,
+  Sunset,
+  Thermometer,
   Trash2,
   Utensils,
+  Wallet,
   WifiOff,
 } from "lucide-react";
 import { doc, onSnapshot, serverTimestamp, setDoc } from "firebase/firestore";
@@ -43,25 +57,62 @@ import {
   type Place,
   type PlaceCategory,
 } from "./trip-data";
+import RouteMap from "./RouteMap";
+import { placeImages } from "./place-images";
+import {
+  dayAlmanacs,
+  forecastWindowNote,
+  moonNights,
+  perseids,
+  stopAlmanacs,
+  stopTripDates,
+} from "./almanac-data";
+import {
+  describeWeatherCode,
+  loadAlerts,
+  loadForecasts,
+  type StopAlerts,
+  type StopForecast,
+} from "./weather";
 
-type TabId = "plan" | "explore" | "checklist" | "info";
+type TabId = "plan" | "explore" | "weather" | "checklist" | "info";
 type SyncStatus = "connecting" | "saving" | "synced" | "offline";
 type CustomTodo = { id: string; text: string };
 type SharedTripState = { checked: string[]; customTodos: CustomTodo[] };
-type TripClock = { daysUntil: number; dayIndex: number };
+type TripClock = { daysUntil: number; dayIndex: number; now: number };
 
 const EMPTY_STATE: SharedTripState = { checked: [], customTodos: [] };
 const STORAGE_KEY = "harsh-trip-2026-state-v1";
 const BOARD_PATH = ["tripBoards", "new-mexico-2026"] as const;
-const TRIP_START = new Date("2026-08-08T00:00:00-05:00").getTime();
+// Trip days roll over at 3 AM Central / 2 AM Mountain, not midnight, so late
+// nights—including the 2–5 AM Perseid window—stay with the day they belong
+// to, and "Today" doesn't flip an hour early during the Mountain Time leg.
+const TRIP_START = new Date("2026-08-08T03:00:00-05:00").getTime();
 const DAY_MS = 86_400_000;
+const TRIP_MILES = 1952;
 
 const tabs: { id: TabId; label: string; shortLabel: string; icon: typeof CalendarDays }[] = [
   { id: "plan", label: "Schedule", shortLabel: "Schedule", icon: CalendarDays },
-  { id: "explore", label: "Food & attractions", shortLabel: "Food & sights", icon: MapPinned },
+  { id: "explore", label: "Food & attractions", shortLabel: "Food", icon: MapPinned },
+  { id: "weather", label: "Weather & sky", shortLabel: "Weather", icon: CloudSun },
   { id: "checklist", label: "Checklist", shortLabel: "Checklist", icon: ListChecks },
-  { id: "info", label: "Trip info", shortLabel: "Trip info", icon: Route },
+  { id: "info", label: "Trip info", shortLabel: "Info", icon: Route },
 ];
+
+const forecastIcons = {
+  clear: Sun,
+  cloud: Cloud,
+  fog: CloudFog,
+  rain: CloudRain,
+  snow: CloudSnow,
+  storm: CloudLightning,
+} as const;
+
+function tripDateLabel(date: string) {
+  const dayId = dayAlmanacs.find((entry) => entry.date === date)?.dayId;
+  const day = tripDays.find((tripDay) => tripDay.id === dayId);
+  return day ? `${day.weekday.slice(0, 3)} ${Number(day.shortDate)}` : String(Number(date.slice(8)));
+}
 
 const dietaryLabels = {
   "vegetarian-first": "Vegetarian-first",
@@ -179,9 +230,17 @@ function CheckButton({
 function PlaceCard({ place }: { place: Place }) {
   const meta = [place.city, place.hours, place.cost, place.duration].filter(Boolean).join(" · ");
   const backupPlace = place.backupPlaceId ? places.find((item) => item.id === place.backupPlaceId) : undefined;
+  const photo = placeImages[place.id];
 
   return (
     <article className={`place-card${place.closed ? " is-closed" : ""}`}>
+      {photo && !place.closed && (
+        <div className="place-photo">
+          {/* eslint-disable-next-line @next/next/no-img-element -- static export uses relative public/ paths */}
+          <img src={photo.src} alt={photo.alt} loading="lazy" />
+          <span>{photo.credit}</span>
+        </div>
+      )}
       <div className="place-top">
         <span className={`type-tag tag-${place.category}`}>
           {place.category === "food" ? <Utensils aria-hidden="true" /> : <Compass aria-hidden="true" />}
@@ -251,24 +310,47 @@ function PlaceCard({ place }: { place: Place }) {
 export default function TripPlanner() {
   const [activeTab, setActiveTab] = useState<TabId>("plan");
   const [selectedDay, setSelectedDay] = useState(0);
+  const [planView, setPlanView] = useState<"cards" | "list">("cards");
   const [dayThirteenMode, setDayThirteenMode] = useState<"relaxed" | "falls">("relaxed");
   const [query, setQuery] = useState("");
   const [kindFilter, setKindFilter] = useState<PlaceCategory | "all">("all");
   const [areaFilter, setAreaFilter] = useState<Area | "all">("all");
   const [dayFilter, setDayFilter] = useState<string>("all");
+  const [mustOnly, setMustOnly] = useState(false);
   const [shared, setShared] = useState<SharedTripState>(EMPTY_STATE);
   const [hydrated, setHydrated] = useState(false);
   const [remoteReady, setRemoteReady] = useState(false);
   const [syncStatus, setSyncStatus] = useState<SyncStatus>("connecting");
   const [customTodoText, setCustomTodoText] = useState("");
   const [clock, setClock] = useState<TripClock | null>(null);
+  const [forecasts, setForecasts] = useState<Record<string, StopForecast>>({});
+  const [alerts, setAlerts] = useState<Record<string, StopAlerts>>({});
   const [mpg, setMpg] = useState(28);
   const [gasPrice, setGasPrice] = useState(3.15);
-  const [homeRoute, setHomeRoute] = useState<"abilene" | "wichita">("abilene");
+  const [travelers, setTravelers] = useState(4);
+  const [lodgingNight, setLodgingNight] = useState(150);
+  const [foodPerDay, setFoodPerDay] = useState(30);
+  const [ticketsBudget, setTicketsBudget] = useState(350);
+  // Wichita Falls/DFW/I-45 is Google's preferred return corridor (~35 mi
+  // shorter than the Abilene/US-84 variant), so it is the default.
+  const [homeRoute, setHomeRoute] = useState<"abilene" | "wichita">("wichita");
   const stateRef = useRef(shared);
   const boardRef = useRef<DocumentReference<DocumentData> | null>(null);
   const lastRemoteKey = useRef("");
   const dayPickerRef = useRef<HTMLDivElement | null>(null);
+  const deckRef = useRef<HTMLDivElement | null>(null);
+
+  // A fresh day (or a view switch) starts the card deck at its first event.
+  useEffect(() => {
+    deckRef.current?.scrollTo({ left: 0 });
+  }, [selectedDay, planView, dayThirteenMode]);
+
+  const nudgeDeck = (direction: -1 | 1) => {
+    const deck = deckRef.current;
+    const card = deck?.querySelector<HTMLElement>(".event-card");
+    if (!deck || !card) return;
+    deck.scrollBy({ left: direction * (card.offsetWidth + 14), behavior: "smooth" });
+  };
 
   // Keep the selected day chip visible in the scrollable picker (phones).
   useEffect(() => {
@@ -301,6 +383,7 @@ export default function TripPlanner() {
       setClock({
         daysUntil: Math.max(0, Math.ceil((TRIP_START - now) / DAY_MS)),
         dayIndex: Math.floor((now - TRIP_START) / DAY_MS),
+        now,
       });
     };
     updateClock();
@@ -312,6 +395,30 @@ export default function TripPlanner() {
   useEffect(() => {
     stateRef.current = shared;
   }, [shared]);
+
+  // Live forecasts and NWS alerts are progressive enhancement: cached in
+  // localStorage, quiet on failure, with almanac normals as the fallback.
+  // Skip fetches that cannot produce anything useful: forecasts before the
+  // trip enters Open-Meteo's 16-day window, and everything once the trip is
+  // more than a week in the past.
+  useEffect(() => {
+    let cancelled = false;
+    const now = Date.now();
+    const tripEnd = TRIP_START + tripDays.length * DAY_MS;
+    if (now > tripEnd + 7 * DAY_MS) return;
+
+    if (now > TRIP_START - 16 * DAY_MS) {
+      void loadForecasts(stopAlmanacs).then((data) => {
+        if (!cancelled) setForecasts(data);
+      });
+    }
+    void loadAlerts(stopAlmanacs).then((data) => {
+      if (!cancelled) setAlerts(data);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     let unsubscribe: (() => void) | undefined;
@@ -422,13 +529,73 @@ export default function TripPlanner() {
   const activeEvents = activeDay.events.filter(
     (event) => !event.mode || event.mode === dayThirteenMode,
   );
+  const activeAlmanac = dayAlmanacs.find((entry) => entry.dayId === activeDay.id);
+  const activeStop = activeAlmanac
+    ? stopAlmanacs.find((stop) => stop.id === activeAlmanac.stopId)
+    : undefined;
+  const activeForecast = activeAlmanac
+    ? forecasts[activeAlmanac.stopId]?.days.find((day) => day.date === activeAlmanac.date)
+    : undefined;
+  // NWS alerts describe right now, so they belong only on today's and
+  // tomorrow's cards during the trip—not on a card three weeks out.
+  const dayAlertsRelevant =
+    clock !== null &&
+    clock.dayIndex >= 0 &&
+    selectedDay >= clock.dayIndex &&
+    selectedDay - clock.dayIndex <= 1;
+  const activeAlerts =
+    dayAlertsRelevant && activeAlmanac ? (alerts[activeAlmanac.stopId]?.alerts ?? []) : [];
+
+  const tripDateCoverage = stopAlmanacs.flatMap((stop) =>
+    (stopTripDates[stop.id] ?? []).map((date) =>
+      Boolean(forecasts[stop.id]?.days.some((day) => day.date === date)),
+    ),
+  );
+  const coveredDates = tripDateCoverage.filter(Boolean).length;
+  const forecastCoverage =
+    coveredDates === 0 ? "none" : coveredDates === tripDateCoverage.length ? "all" : "partial";
+
+  const alertRows = stopAlmanacs.flatMap((stop) =>
+    (alerts[stop.id]?.alerts ?? []).map((alert) => ({ stop, alert })),
+  );
+  const alertsCheckedAt = Object.values(alerts).reduce(
+    (latest, stop) => Math.max(latest, stop.fetchedAt),
+    0,
+  );
+  // Where the group is right now, from the same day table the schedule uses.
+  const currentStopId =
+    clock && clock.dayIndex >= 0 && clock.dayIndex < tripDays.length
+      ? (dayAlmanacs.find((entry) => entry.dayId === tripDays[clock.dayIndex].id)?.stopId ?? null)
+      : null;
   const activeTips = dayTips[activeDay.id] ?? [];
+  // Shared enrichment for both schedule views (list rows and swipe cards).
+  const enrichedEvents = activeEvents.map((event) => {
+    const place = event.placeId ? places.find((item) => item.id === event.placeId) : undefined;
+    const directions = place
+      ? placeDirectionsHref(place)
+      : event.mapQuery
+        ? directionsHref(event.mapQuery)
+        : undefined;
+    return {
+      event,
+      place,
+      directions,
+      locationName:
+        event.locationName ?? place?.name ?? (event.mapQuery ? event.title : undefined),
+      locationDetail: event.locationDetail ?? place?.city,
+      options: (event.alternatives ?? []).filter(
+        (option) => !option.route || activeDay.id !== "aug-15" || option.route === homeRoute,
+      ),
+      image: event.placeId ? placeImages[event.placeId] : undefined,
+    };
+  });
 
   const normalizedQuery = query.trim().toLowerCase();
   const filteredPlaces = places.filter((place) => {
     if (kindFilter !== "all" && place.category !== kindFilter) return false;
     if (areaFilter !== "all" && place.area !== areaFilter) return false;
     if (dayFilter !== "all" && !place.dayIds.includes(dayFilter)) return false;
+    if (mustOnly && !place.mustDo) return false;
     if (normalizedQuery) {
       const haystack = [
         place.name,
@@ -451,17 +618,38 @@ export default function TripPlanner() {
     return true;
   });
   const filtersActive =
-    kindFilter !== "all" || areaFilter !== "all" || dayFilter !== "all" || normalizedQuery !== "";
+    kindFilter !== "all" ||
+    areaFilter !== "all" ||
+    dayFilter !== "all" ||
+    mustOnly ||
+    normalizedQuery !== "";
 
   const clearFilters = () => {
     setQuery("");
     setKindFilter("all");
     setAreaFilter("all");
     setDayFilter("all");
+    setMustOnly(false);
   };
 
-  const fuelGallons = 1952 / Math.max(mpg, 1);
+  const tripNights = tripDays.length - 1;
+  const fuelGallons = TRIP_MILES / Math.max(mpg, 1);
   const fuelCost = fuelGallons * Math.max(gasPrice, 0);
+  const safeTravelers = Math.min(Math.max(travelers, 1), 9);
+  const lodgingCost = tripNights * Math.max(lodgingNight, 0);
+  const foodCost = tripDays.length * safeTravelers * Math.max(foodPerDay, 0);
+  const ticketsCost = Math.max(ticketsBudget, 0);
+  const budgetTotal = fuelCost + lodgingCost + foodCost + ticketsCost;
+  const budgetRows = [
+    {
+      label: "Fuel",
+      detail: `${fuelGallons.toFixed(0)} gal · ${TRIP_MILES.toLocaleString()} mi`,
+      amount: fuelCost,
+    },
+    { label: "Lodging", detail: `${tripNights} nights`, amount: lodgingCost },
+    { label: "Food", detail: `${tripDays.length} days × ${safeTravelers}`, amount: foodCost },
+    { label: "Tickets + entries", detail: "opera, pueblo, parks", amount: ticketsCost },
+  ];
   const homeMeal = places.find(
     (place) => place.id === (homeRoute === "abilene" ? "spicy-india" : "masala-curry"),
   );
@@ -551,28 +739,52 @@ export default function TripPlanner() {
       <main id="main">
         {activeTab === "plan" && (
           <section className="panel" id="plan-panel" role="tabpanel" aria-labelledby="tab-plan">
-            <div className="panel-head">
-              <h2>Day by day</h2>
-              <p>
-                Dates, destinations, mileage, and drive times are fixed. Times marked
-                “suggested” are flexible.
-              </p>
+            <div className="panel-head panel-head-row">
+              <div>
+                <h2>Day by day</h2>
+                <p>
+                  Dates, destinations, mileage, and drive times are fixed. Times marked
+                  “suggested” are flexible.
+                </p>
+              </div>
+              <div className="segmented" role="group" aria-label="Choose the schedule view">
+                <button
+                  type="button"
+                  className={planView === "cards" ? "active" : ""}
+                  aria-pressed={planView === "cards"}
+                  onClick={() => setPlanView("cards")}
+                >
+                  Swipe cards
+                </button>
+                <button
+                  type="button"
+                  className={planView === "list" ? "active" : ""}
+                  aria-pressed={planView === "list"}
+                  onClick={() => setPlanView("list")}
+                >
+                  List
+                </button>
+              </div>
             </div>
 
             <div className="day-picker" aria-label="Choose trip day" ref={dayPickerRef}>
-              {tripDays.map((day, index) => (
-                <button
-                  type="button"
-                  key={day.id}
-                  className={selectedDay === index ? "active" : ""}
-                  onClick={() => setSelectedDay(index)}
-                  aria-current={selectedDay === index ? "date" : undefined}
-                >
-                  <small>{day.weekday.slice(0, 3)}</small>
-                  <strong>{day.shortDate}</strong>
-                  <span>{day.stop}</span>
-                </button>
-              ))}
+              {tripDays.map((day, index) => {
+                const isToday = clock?.dayIndex === index;
+                return (
+                  <button
+                    type="button"
+                    key={day.id}
+                    className={`${selectedDay === index ? "active" : ""}${isToday ? " is-today" : ""}`}
+                    onClick={() => setSelectedDay(index)}
+                    aria-current={selectedDay === index ? "date" : undefined}
+                    aria-label={`${day.weekday} August ${Number(day.shortDate)} · ${day.stop}${isToday ? " · today" : ""}`}
+                  >
+                    <small>{isToday ? "Today" : day.weekday.slice(0, 3)}</small>
+                    <strong>{day.shortDate}</strong>
+                    <span>{day.stop}</span>
+                  </button>
+                );
+              })}
             </div>
 
             <article className="day-card">
@@ -640,6 +852,47 @@ export default function TripPlanner() {
                 </span>
               </div>
 
+              {activeAlmanac && (
+                <div className="day-conditions" aria-label="Sun and weather for this day">
+                  <span>
+                    <Sunrise aria-hidden="true" /> {activeAlmanac.sunrise}
+                  </span>
+                  {activeAlmanac.sunset && (
+                    <span>
+                      <Sunset aria-hidden="true" /> {activeAlmanac.sunset}
+                    </span>
+                  )}
+                  {activeStop && !activeAlmanac.enRoute && (
+                    <span>
+                      <Thermometer aria-hidden="true" /> {activeStop.augHighF}° /{" "}
+                      {activeStop.augLowF}° typical
+                    </span>
+                  )}
+                  {activeAlmanac.stormWindow && (
+                    <span className="cond-storm">
+                      <CloudLightning aria-hidden="true" /> {activeAlmanac.stormWindow}
+                    </span>
+                  )}
+                  {activeForecast && (
+                    <span className="cond-live">
+                      <CloudSun aria-hidden="true" /> Forecast:{" "}
+                      {activeForecast.weatherCode !== null
+                        ? `${describeWeatherCode(activeForecast.weatherCode).label.toLowerCase()} · `
+                        : ""}
+                      {activeForecast.highF}°/{activeForecast.lowF}°
+                      {activeForecast.precipChance !== null
+                        ? ` · ${activeForecast.precipChance}% rain`
+                        : ""}
+                    </span>
+                  )}
+                  {activeAlerts.map((alert) => (
+                    <span className="cond-alert" key={alert.id}>
+                      <ShieldAlert aria-hidden="true" /> NWS: {alert.event}
+                    </span>
+                  ))}
+                </div>
+              )}
+
               {activeDay.advisory && (
                 <div className="advisory">
                   <ShieldAlert aria-hidden="true" />
@@ -696,7 +949,11 @@ export default function TripPlanner() {
                 <div className="mode-switch" aria-label="Choose the August 15 home route">
                   <div>
                     <strong>August 15 needs a route choice</strong>
-                    <span>Home is not specified, so the named meal, fuel, and rest stops follow the corridor you select.</span>
+                    <span>
+                      Google prefers US-287 → DFW → I-45 via Wichita Falls (~35 mi shorter,
+                      verified Aug 2026); the Abilene corridor repeats the outbound roads. The
+                      named stops follow whichever you pick.
+                    </span>
                   </div>
                   <div>
                     <button
@@ -717,109 +974,234 @@ export default function TripPlanner() {
                 </div>
               )}
 
-              <div className="timeline">
-                {activeEvents.map((event) => {
-                  const isChecked = shared.checked.includes(event.id);
-                  const eventPlace = event.placeId
-                    ? places.find((place) => place.id === event.placeId)
-                    : undefined;
-                  const eventDirections = eventPlace
-                    ? placeDirectionsHref(eventPlace)
-                    : event.mapQuery
-                      ? directionsHref(event.mapQuery)
-                      : undefined;
-                  const eventLocationName =
-                    event.locationName ?? eventPlace?.name ?? (event.mapQuery ? event.title : undefined);
-                  const eventLocationDetail = event.locationDetail ?? eventPlace?.city;
-                  const scheduleOptions = (event.alternatives ?? []).filter(
-                    (option) =>
-                      !option.route || activeDay.id !== "aug-15" || option.route === homeRoute,
-                  );
-                  return (
-                    <div className={`timeline-row ${isChecked ? "completed" : ""}`} key={event.id}>
-                      <div className={`timeline-icon kind-${event.kind}`}>
-                        <EventIcon kind={event.kind} />
-                      </div>
-                      <div className="timeline-content">
-                        <div className="timeline-title-row">
-                          <span className="timeline-time">{event.time}</span>
-                          {event.duration && <span className="timeline-duration">{event.duration}</span>}
-                        </div>
-                        <h4>{event.title}</h4>
-                        <p>{event.detail}</p>
-                        {eventDirections && eventLocationName && (
-                          <a
-                            className="timeline-location"
-                            href={eventDirections}
-                            target="_blank"
-                            rel="noreferrer"
+              {planView === "cards" ? (
+                <div className="event-deck-wrap">
+                  <div
+                    className="event-deck"
+                    ref={deckRef}
+                    aria-label={`Swipe through the ${enrichedEvents.length} stops on ${activeDay.title}`}
+                  >
+                    {enrichedEvents.map(
+                      ({ event, directions, locationName, locationDetail, options, image }, index) => {
+                        const isChecked = shared.checked.includes(event.id);
+                        return (
+                          <article
+                            className={`event-card ${isChecked ? "completed" : ""}`}
+                            key={event.id}
                           >
-                            <MapPinned aria-hidden="true" />
-                            <span>
-                              <strong>{eventLocationName}</strong>
-                              {eventLocationDetail && <small>{eventLocationDetail}</small>}
-                            </span>
-                            <Navigation aria-hidden="true" />
-                          </a>
-                        )}
-                        {(event.note || event.href || eventDirections) && (
-                          <div className="timeline-meta">
-                            {event.note && <em>{event.note}</em>}
-                            {eventDirections && (
-                              <a href={eventDirections} target="_blank" rel="noreferrer">
-                                Directions <Navigation aria-hidden="true" />
-                              </a>
-                            )}
-                            {event.href && (
-                              <a href={event.href} target="_blank" rel="noreferrer">
-                                {event.linkLabel ?? "Source"} <ExternalLink aria-hidden="true" />
-                              </a>
-                            )}
-                          </div>
-                        )}
-                        {scheduleOptions.length > 0 && (
-                          <aside className="timeline-options" aria-label={`Options for ${event.title}`}>
-                            <strong>{event.optionsLabel ?? "Named alternatives"}</strong>
-                            <div>
-                              {scheduleOptions.map((option) => (
-                                <div className="timeline-option" key={`${event.id}-${option.name}`}>
-                                  <a
-                                    href={directionsHref(option.mapQuery)}
-                                    target="_blank"
-                                    rel="noreferrer"
-                                  >
-                                    <span>
-                                      <b>{option.name}</b>
-                                      <small>{option.detail}</small>
-                                    </span>
-                                    <Navigation aria-hidden="true" />
-                                  </a>
-                                  {option.href && (
-                                    <a
-                                      className="timeline-option-source"
-                                      href={option.href}
-                                      target="_blank"
-                                      rel="noreferrer"
-                                    >
-                                      {option.linkLabel ?? "Info"} <ExternalLink aria-hidden="true" />
+                            <div className={`event-card-media kind-${event.kind}`}>
+                              {image ? (
+                                // eslint-disable-next-line @next/next/no-img-element -- static export uses relative public/ paths; next/image adds nothing here
+                                <img src={image.src} alt={image.alt} loading="lazy" />
+                              ) : (
+                                <EventIcon kind={event.kind} />
+                              )}
+                              <span className="event-card-step">
+                                {index + 1} / {enrichedEvents.length}
+                              </span>
+                              {image && <span className="event-card-credit">{image.credit}</span>}
+                              <CheckButton
+                                id={event.id}
+                                checked={isChecked}
+                                onToggle={toggleChecked}
+                                label={event.title}
+                              />
+                            </div>
+                            <div className="event-card-body">
+                              <div className="timeline-title-row">
+                                <span className="timeline-time">{event.time}</span>
+                                {event.duration && (
+                                  <span className="timeline-duration">{event.duration}</span>
+                                )}
+                              </div>
+                              <h4>{event.title}</h4>
+                              <p>{event.detail}</p>
+                              {directions && locationName && (
+                                <a
+                                  className="timeline-location"
+                                  href={directions}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                >
+                                  <MapPinned aria-hidden="true" />
+                                  <span>
+                                    <strong>{locationName}</strong>
+                                    {locationDetail && <small>{locationDetail}</small>}
+                                  </span>
+                                  <Navigation aria-hidden="true" />
+                                </a>
+                              )}
+                              {(event.note || event.href) && (
+                                <div className="timeline-meta">
+                                  {event.note && <em>{event.note}</em>}
+                                  {event.href && (
+                                    <a href={event.href} target="_blank" rel="noreferrer">
+                                      {event.linkLabel ?? "Source"}{" "}
+                                      <ExternalLink aria-hidden="true" />
                                     </a>
                                   )}
                                 </div>
-                              ))}
+                              )}
+                              {options.length > 0 && (
+                                <div className="option-swiper-block">
+                                  <strong>{event.optionsLabel ?? "Named alternatives"}</strong>
+                                  <div
+                                    className="option-swiper"
+                                    aria-label={`Swipe through options for ${event.title}`}
+                                  >
+                                    {options.map((option) => (
+                                      <div className="option-card" key={`${event.id}-${option.name}`}>
+                                        <a
+                                          className="option-card-main"
+                                          href={directionsHref(option.mapQuery)}
+                                          target="_blank"
+                                          rel="noreferrer"
+                                        >
+                                          <b>{option.name}</b>
+                                          <small>{option.detail}</small>
+                                        </a>
+                                        {option.href && (
+                                          <a
+                                            className="option-card-source"
+                                            href={option.href}
+                                            target="_blank"
+                                            rel="noreferrer"
+                                          >
+                                            {option.linkLabel ?? "Info"}{" "}
+                                            <ExternalLink aria-hidden="true" />
+                                          </a>
+                                        )}
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
                             </div>
-                          </aside>
-                        )}
-                      </div>
-                      <CheckButton
-                        id={event.id}
-                        checked={isChecked}
-                        onToggle={toggleChecked}
-                        label={event.title}
-                      />
-                    </div>
-                  );
-                })}
-              </div>
+                          </article>
+                        );
+                      },
+                    )}
+                  </div>
+                  <div className="deck-controls">
+                    <button
+                      type="button"
+                      onClick={() => nudgeDeck(-1)}
+                      aria-label="Previous event card"
+                    >
+                      <ChevronLeft aria-hidden="true" />
+                    </button>
+                    <span>
+                      Swipe or use the arrows · {enrichedEvents.length} stops on this day
+                    </span>
+                    <button type="button" onClick={() => nudgeDeck(1)} aria-label="Next event card">
+                      <ChevronRight aria-hidden="true" />
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="timeline">
+                  {enrichedEvents.map(
+                    ({ event, directions, locationName, locationDetail, options }) => {
+                      const isChecked = shared.checked.includes(event.id);
+                      return (
+                        <div
+                          className={`timeline-row ${isChecked ? "completed" : ""}`}
+                          key={event.id}
+                        >
+                          <div className={`timeline-icon kind-${event.kind}`}>
+                            <EventIcon kind={event.kind} />
+                          </div>
+                          <div className="timeline-content">
+                            <div className="timeline-title-row">
+                              <span className="timeline-time">{event.time}</span>
+                              {event.duration && (
+                                <span className="timeline-duration">{event.duration}</span>
+                              )}
+                            </div>
+                            <h4>{event.title}</h4>
+                            <p>{event.detail}</p>
+                            {directions && locationName && (
+                              <a
+                                className="timeline-location"
+                                href={directions}
+                                target="_blank"
+                                rel="noreferrer"
+                              >
+                                <MapPinned aria-hidden="true" />
+                                <span>
+                                  <strong>{locationName}</strong>
+                                  {locationDetail && <small>{locationDetail}</small>}
+                                </span>
+                                <Navigation aria-hidden="true" />
+                              </a>
+                            )}
+                            {(event.note || event.href || directions) && (
+                              <div className="timeline-meta">
+                                {event.note && <em>{event.note}</em>}
+                                {directions && (
+                                  <a href={directions} target="_blank" rel="noreferrer">
+                                    Directions <Navigation aria-hidden="true" />
+                                  </a>
+                                )}
+                                {event.href && (
+                                  <a href={event.href} target="_blank" rel="noreferrer">
+                                    {event.linkLabel ?? "Source"} <ExternalLink aria-hidden="true" />
+                                  </a>
+                                )}
+                              </div>
+                            )}
+                            {options.length > 0 && (
+                              <aside
+                                className="timeline-options"
+                                aria-label={`Options for ${event.title}`}
+                              >
+                                <strong>{event.optionsLabel ?? "Named alternatives"}</strong>
+                                <div>
+                                  {options.map((option) => (
+                                    <div
+                                      className="timeline-option"
+                                      key={`${event.id}-${option.name}`}
+                                    >
+                                      <a
+                                        href={directionsHref(option.mapQuery)}
+                                        target="_blank"
+                                        rel="noreferrer"
+                                      >
+                                        <span>
+                                          <b>{option.name}</b>
+                                          <small>{option.detail}</small>
+                                        </span>
+                                        <Navigation aria-hidden="true" />
+                                      </a>
+                                      {option.href && (
+                                        <a
+                                          className="timeline-option-source"
+                                          href={option.href}
+                                          target="_blank"
+                                          rel="noreferrer"
+                                        >
+                                          {option.linkLabel ?? "Info"}{" "}
+                                          <ExternalLink aria-hidden="true" />
+                                        </a>
+                                      )}
+                                    </div>
+                                  ))}
+                                </div>
+                              </aside>
+                            )}
+                          </div>
+                          <CheckButton
+                            id={event.id}
+                            checked={isChecked}
+                            onToggle={toggleChecked}
+                            label={event.title}
+                          />
+                        </div>
+                      );
+                    },
+                  )}
+                </div>
+              )}
             </article>
           </section>
         )}
@@ -883,6 +1265,15 @@ export default function TripPlanner() {
                   ))}
                 </select>
               </label>
+
+              <button
+                type="button"
+                className={`must-toggle ${mustOnly ? "active" : ""}`}
+                aria-pressed={mustOnly}
+                onClick={() => setMustOnly((value) => !value)}
+              >
+                <Sparkles aria-hidden="true" /> Don’t-miss
+              </button>
             </div>
 
             <div className="chip-row" role="group" aria-label="Filter by place">
@@ -934,6 +1325,250 @@ export default function TripPlanner() {
                 </button>
               </div>
             )}
+          </section>
+        )}
+
+        {activeTab === "weather" && (
+          <section
+            className="panel"
+            id="weather-panel"
+            role="tabpanel"
+            aria-labelledby="tab-weather"
+          >
+            <div className="panel-head">
+              <h2>Weather & sky</h2>
+              <p>
+                Aug 8–15 sits in the peak weeks of the North American Monsoon: sunny, calm
+                mornings almost every day, storms building over the mountains after lunch.
+                The typical numbers below are NOAA 1991–2020 normals for these exact dates.
+              </p>
+            </div>
+
+            <div className="forecast-note">
+              <CloudSun aria-hidden="true" />
+              <span>
+                {forecastCoverage === "all"
+                  ? "All trip dates are inside the live 16-day window—forecast tiles below refresh on every visit and stay cached for offline mornings."
+                  : forecastCoverage === "partial"
+                    ? "Live forecasts are filling in day by day as trip dates enter the 16-day window—tiles still marked “normals” aren't in range yet."
+                    : forecastWindowNote}
+              </span>
+            </div>
+
+            {alertRows.length > 0 ? (
+              <div className="alerts-strip" role="status">
+                {alertRows.map(({ stop, alert }) => (
+                  <a
+                    className="alert-row"
+                    key={`${stop.id}-${alert.id}`}
+                    href={stop.nwsUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    <ShieldAlert aria-hidden="true" />
+                    <span>
+                      <strong>
+                        {stop.name}: {alert.event}
+                      </strong>
+                      {alert.headline && <small>{alert.headline}</small>}
+                    </span>
+                    <ExternalLink aria-hidden="true" />
+                  </a>
+                ))}
+              </div>
+            ) : (
+              alertsCheckedAt > 0 && (
+                <p className="alerts-clear">
+                  <CheckCircle2 aria-hidden="true" />{" "}
+                  {(clock?.now ?? alertsCheckedAt) - alertsCheckedAt < 90 * 60 * 1000
+                    ? `No active NWS watches or warnings at any stop as of ${new Date(alertsCheckedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}.`
+                    : "Couldn't refresh NWS alerts—use the NWS forecast links on each stop for current watches and warnings."}
+                </p>
+              )
+            )}
+
+            <div className="stop-weather-grid">
+              {stopAlmanacs.map((stop) => (
+                <article className="stop-weather-card" key={stop.id}>
+                  <div className="stop-weather-head">
+                    <div>
+                      <h3>{stop.name}</h3>
+                      <small>
+                        {stop.nights} · {stop.elevationFt.toLocaleString()} ft
+                      </small>
+                    </div>
+                    <a className="card-link" href={stop.nwsUrl} target="_blank" rel="noreferrer">
+                      NWS forecast <ExternalLink aria-hidden="true" />
+                    </a>
+                  </div>
+                  <div className="normals-row">
+                    <span className="normal-chip">
+                      <Thermometer aria-hidden="true" /> August normal{" "}
+                      <strong>
+                        {stop.augHighF}° / {stop.augLowF}°
+                      </strong>
+                    </span>
+                    <span className="normal-chip">
+                      <CloudRain aria-hidden="true" />
+                      <strong>{stop.augPrecipIn}″</strong> · {stop.augRainDays} rain days
+                    </span>
+                  </div>
+                  <div className="forecast-days">
+                    {(stopTripDates[stop.id] ?? []).map((date) => {
+                      const forecast = forecasts[stop.id]?.days.find(
+                        (day) => day.date === date,
+                      );
+                      if (!forecast) {
+                        return (
+                          <div className="forecast-day pending" key={date}>
+                            <small>{tripDateLabel(date)}</small>
+                            <strong>
+                              {stop.augHighF}°<span>/{stop.augLowF}°</span>
+                            </strong>
+                            <em>normals</em>
+                          </div>
+                        );
+                      }
+                      const described =
+                        forecast.weatherCode !== null
+                          ? describeWeatherCode(forecast.weatherCode)
+                          : null;
+                      const Icon = forecastIcons[described?.group ?? "cloud"];
+                      return (
+                        <div className="forecast-day" key={date}>
+                          <small>{tripDateLabel(date)}</small>
+                          <Icon className={`fc-${described?.group ?? "cloud"}`} aria-hidden="true" />
+                          <strong>
+                            {forecast.highF}°<span>/{forecast.lowF}°</span>
+                          </strong>
+                          <em>
+                            {forecast.precipChance !== null && (
+                              <>
+                                <Droplets aria-hidden="true" /> {forecast.precipChance}%
+                              </>
+                            )}
+                            {forecast.precipChance !== null && described ? " · " : ""}
+                            {described?.label}
+                          </em>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <p className="stop-weather-note">{stop.climateNote}</p>
+                  <p className="stop-weather-note">{stop.stormNote}</p>
+                </article>
+              ))}
+            </div>
+
+            <div className="monsoon-card">
+              <h3>
+                <CloudLightning aria-hidden="true" /> The monsoon, in one minute
+              </h3>
+              <p>
+                August is the wettest month of the year in Taos (1.77″) and Santa Fe (1.96″),
+                but it arrives in bursts and breaks—some trip days will stay bone dry, others
+                fire widespread storms. The daily rhythm is reliable enough to plan around:
+              </p>
+              <div className="monsoon-rhythm">
+                <div>
+                  <strong>
+                    <Sun aria-hidden="true" /> Morning · clear
+                  </strong>
+                  <p>
+                    Sunny, calm, dry nearly every day. The window for the Gorge Bridge,
+                    Bandelier, and canyon trails—UV hits 10–12 at altitude, so sun protection
+                    from the start.
+                  </p>
+                </div>
+                <div>
+                  <strong>
+                    <Cloud aria-hidden="true" /> Midday · building
+                  </strong>
+                  <p>
+                    Cumulus stacks over the Sangre de Cristos, Jemez, and Sandias by 11 AM;
+                    first storms on the peaks noon–2 PM. Be off exposed rims and high points
+                    by about 1 PM.
+                  </p>
+                </div>
+                <div>
+                  <strong>
+                    <CloudLightning aria-hidden="true" /> Afternoon · storms
+                  </strong>
+                  <p>
+                    Cells drift over valleys 2–8 PM: brief heavy rain, gusty outflow, and a
+                    lot of lightning. Wait 30 minutes after the last thunder; most storms die
+                    out by late evening.
+                  </p>
+                </div>
+              </div>
+              <p className="small-note">
+                Flash floods run ahead of the rain: burn scars above Frijoles Canyon and slot
+                drainages can flood from storms miles upstream while the sky overhead stays
+                blue. Never cross moving water, at Palo Duro or anywhere else.
+              </p>
+            </div>
+
+            <div className="sky-grid">
+              <article className="tool-card">
+                <h3>
+                  <Sunrise aria-hidden="true" /> Sun, day by day
+                </h3>
+                <table className="sun-table">
+                  <thead>
+                    <tr>
+                      <th scope="col">Day</th>
+                      <th scope="col">Sunrise</th>
+                      <th scope="col">Sunset</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {dayAlmanacs.map((entry) => {
+                      const day = tripDays.find((tripDay) => tripDay.id === entry.dayId);
+                      if (!day) return null;
+                      const tonight = clock?.dayIndex === tripDays.indexOf(day);
+                      return (
+                        <tr key={entry.dayId} className={tonight ? "is-tonight" : undefined}>
+                          <td>
+                            {day.weekday.slice(0, 3)} {Number(day.shortDate)}{" "}
+                            <small>· {day.stop}</small>
+                          </td>
+                          <td>{entry.sunrise}</td>
+                          <td>{entry.sunset ?? "en route"}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+                <p className="small-note">
+                  Aug 9 and Aug 14 cross time zones, so those rows mix CDT and MDT on
+                  purpose—sunrise is where the day starts, sunset where it ends.
+                </p>
+              </article>
+
+              <article className="tool-card">
+                <h3>
+                  <MoonStar aria-hidden="true" /> Moon & meteors, night by night
+                </h3>
+                <div className="moon-list">
+                  {moonNights.map((night) => (
+                    <div className="moon-row" key={night.date}>
+                      <strong>{night.label}</strong>
+                      <span className="moon-phase">
+                        {night.phase} · {night.illumination}%
+                      </span>
+                      <span className="moon-note">{night.note}</span>
+                    </div>
+                  ))}
+                </div>
+                <div className="perseids-callout">
+                  <Sparkles aria-hidden="true" />
+                  <div>
+                    <strong>{perseids.title}</strong>
+                    <p>{perseids.detail}</p>
+                  </div>
+                </div>
+              </article>
+            </div>
           </section>
         )}
 
@@ -1078,6 +1713,7 @@ export default function TripPlanner() {
                   <Navigation aria-hidden="true" /> Open core route
                 </a>
               </div>
+              <RouteMap currentStopId={currentStopId} />
               <ol className="route-list">
                 {routeStops.map((stop, index) => (
                   <li key={`${stop.place}-${index}`}>
@@ -1120,9 +1756,12 @@ export default function TripPlanner() {
 
               <article className="tool-card">
                 <h3>
-                  <Fuel aria-hidden="true" /> Fuel estimate
+                  <Wallet aria-hidden="true" /> Trip budget sketch
                 </h3>
-                <p>About {fuelGallons.toFixed(1)} gallons for the full 1,952-mile loop.</p>
+                <p>
+                  Planning math, not bookkeeping—edit the numbers to match the group and the
+                  bars re-balance.
+                </p>
                 <div className="input-pair">
                   <label>
                     Vehicle MPG
@@ -1147,10 +1786,81 @@ export default function TripPlanner() {
                     />
                   </label>
                 </div>
-                <div className="fuel-total">
-                  <span>Estimated fuel cost</span>
-                  <strong>${Number.isFinite(fuelCost) ? fuelCost.toFixed(0) : "0"}</strong>
+                <div className="input-pair">
+                  <label>
+                    Travelers
+                    <input
+                      type="number"
+                      min="1"
+                      max="9"
+                      step="1"
+                      value={travelers}
+                      onChange={(event) => setTravelers(Number(event.target.value))}
+                    />
+                  </label>
+                  <label>
+                    Lodging $/night
+                    <input
+                      type="number"
+                      min="0"
+                      max="1000"
+                      step="10"
+                      value={lodgingNight}
+                      onChange={(event) => setLodgingNight(Number(event.target.value))}
+                    />
+                  </label>
                 </div>
+                <div className="input-pair">
+                  <label>
+                    Food $/person/day
+                    <input
+                      type="number"
+                      min="0"
+                      max="200"
+                      step="5"
+                      value={foodPerDay}
+                      onChange={(event) => setFoodPerDay(Number(event.target.value))}
+                    />
+                  </label>
+                  <label>
+                    Tickets + entries $
+                    <input
+                      type="number"
+                      min="0"
+                      max="3000"
+                      step="25"
+                      value={ticketsBudget}
+                      onChange={(event) => setTicketsBudget(Number(event.target.value))}
+                    />
+                  </label>
+                </div>
+                <div className="budget-rows">
+                  {budgetRows.map((row) => {
+                    const share = budgetTotal > 0 ? Math.max(2, (row.amount / budgetTotal) * 100) : 0;
+                    return (
+                      <div className="budget-row" key={row.label}>
+                        <div className="budget-row-head">
+                          <span>
+                            {row.label} <small>{row.detail}</small>
+                          </span>
+                          <strong>${Number.isFinite(row.amount) ? Math.round(row.amount) : 0}</strong>
+                        </div>
+                        <div className="budget-bar">
+                          <i style={{ width: `${share}%` }} />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+                <div className="fuel-total">
+                  <span>Whole-trip estimate</span>
+                  <strong>${Number.isFinite(budgetTotal) ? Math.round(budgetTotal) : 0}</strong>
+                </div>
+                <p className="small-note">
+                  Opera seats, Taos Pueblo ($25 each), Bandelier ($25/vehicle), Palo Duro, and
+                  Nambé Falls ($20/vehicle) all land in the tickets line—see each card in Food
+                  &amp; attractions for current prices.
+                </p>
               </article>
 
               <article className="tool-card">
@@ -1158,8 +1868,9 @@ export default function TripPlanner() {
                   <Navigation aria-hidden="true" /> Aug 15 meal stop
                 </h3>
                 <p>
-                  The home city isn’t locked in, so both corridors stay planned. Pick the one
-                  that matches the final route.
+                  Route check (Aug 2026): the Wichita Falls → DFW → I-45 corridor is Google&apos;s
+                  preferred pick and ~35 miles shorter; via Abilene repeats the outbound roads.
+                  Both stay planned—pick what matches the day.
                 </p>
                 <div className="segmented" role="group" aria-label="Choose the home route">
                   <button
