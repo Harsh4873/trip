@@ -6,6 +6,7 @@ import {
   CalendarDays,
   Check,
   CheckCircle2,
+  ChevronLeft,
   ChevronRight,
   Circle,
   Clock3,
@@ -57,6 +58,7 @@ import {
   type PlaceCategory,
 } from "./trip-data";
 import RouteMap from "./RouteMap";
+import { placeImages } from "./place-images";
 import {
   dayAlmanacs,
   forecastWindowNote,
@@ -228,9 +230,17 @@ function CheckButton({
 function PlaceCard({ place }: { place: Place }) {
   const meta = [place.city, place.hours, place.cost, place.duration].filter(Boolean).join(" · ");
   const backupPlace = place.backupPlaceId ? places.find((item) => item.id === place.backupPlaceId) : undefined;
+  const photo = placeImages[place.id];
 
   return (
     <article className={`place-card${place.closed ? " is-closed" : ""}`}>
+      {photo && !place.closed && (
+        <div className="place-photo">
+          {/* eslint-disable-next-line @next/next/no-img-element -- static export uses relative public/ paths */}
+          <img src={photo.src} alt={photo.alt} loading="lazy" />
+          <span>{photo.credit}</span>
+        </div>
+      )}
       <div className="place-top">
         <span className={`type-tag tag-${place.category}`}>
           {place.category === "food" ? <Utensils aria-hidden="true" /> : <Compass aria-hidden="true" />}
@@ -300,6 +310,7 @@ function PlaceCard({ place }: { place: Place }) {
 export default function TripPlanner() {
   const [activeTab, setActiveTab] = useState<TabId>("plan");
   const [selectedDay, setSelectedDay] = useState(0);
+  const [planView, setPlanView] = useState<"cards" | "list">("cards");
   const [dayThirteenMode, setDayThirteenMode] = useState<"relaxed" | "falls">("relaxed");
   const [query, setQuery] = useState("");
   const [kindFilter, setKindFilter] = useState<PlaceCategory | "all">("all");
@@ -320,11 +331,26 @@ export default function TripPlanner() {
   const [lodgingNight, setLodgingNight] = useState(150);
   const [foodPerDay, setFoodPerDay] = useState(30);
   const [ticketsBudget, setTicketsBudget] = useState(350);
-  const [homeRoute, setHomeRoute] = useState<"abilene" | "wichita">("abilene");
+  // Wichita Falls/DFW/I-45 is Google's preferred return corridor (~35 mi
+  // shorter than the Abilene/US-84 variant), so it is the default.
+  const [homeRoute, setHomeRoute] = useState<"abilene" | "wichita">("wichita");
   const stateRef = useRef(shared);
   const boardRef = useRef<DocumentReference<DocumentData> | null>(null);
   const lastRemoteKey = useRef("");
   const dayPickerRef = useRef<HTMLDivElement | null>(null);
+  const deckRef = useRef<HTMLDivElement | null>(null);
+
+  // A fresh day (or a view switch) starts the card deck at its first event.
+  useEffect(() => {
+    deckRef.current?.scrollTo({ left: 0 });
+  }, [selectedDay, planView, dayThirteenMode]);
+
+  const nudgeDeck = (direction: -1 | 1) => {
+    const deck = deckRef.current;
+    const card = deck?.querySelector<HTMLElement>(".event-card");
+    if (!deck || !card) return;
+    deck.scrollBy({ left: direction * (card.offsetWidth + 14), behavior: "smooth" });
+  };
 
   // Keep the selected day chip visible in the scrollable picker (phones).
   useEffect(() => {
@@ -542,6 +568,27 @@ export default function TripPlanner() {
       ? (dayAlmanacs.find((entry) => entry.dayId === tripDays[clock.dayIndex].id)?.stopId ?? null)
       : null;
   const activeTips = dayTips[activeDay.id] ?? [];
+  // Shared enrichment for both schedule views (list rows and swipe cards).
+  const enrichedEvents = activeEvents.map((event) => {
+    const place = event.placeId ? places.find((item) => item.id === event.placeId) : undefined;
+    const directions = place
+      ? placeDirectionsHref(place)
+      : event.mapQuery
+        ? directionsHref(event.mapQuery)
+        : undefined;
+    return {
+      event,
+      place,
+      directions,
+      locationName:
+        event.locationName ?? place?.name ?? (event.mapQuery ? event.title : undefined),
+      locationDetail: event.locationDetail ?? place?.city,
+      options: (event.alternatives ?? []).filter(
+        (option) => !option.route || activeDay.id !== "aug-15" || option.route === homeRoute,
+      ),
+      image: event.placeId ? placeImages[event.placeId] : undefined,
+    };
+  });
 
   const normalizedQuery = query.trim().toLowerCase();
   const filteredPlaces = places.filter((place) => {
@@ -692,12 +739,32 @@ export default function TripPlanner() {
       <main id="main">
         {activeTab === "plan" && (
           <section className="panel" id="plan-panel" role="tabpanel" aria-labelledby="tab-plan">
-            <div className="panel-head">
-              <h2>Day by day</h2>
-              <p>
-                Dates, destinations, mileage, and drive times are fixed. Times marked
-                “suggested” are flexible.
-              </p>
+            <div className="panel-head panel-head-row">
+              <div>
+                <h2>Day by day</h2>
+                <p>
+                  Dates, destinations, mileage, and drive times are fixed. Times marked
+                  “suggested” are flexible.
+                </p>
+              </div>
+              <div className="segmented" role="group" aria-label="Choose the schedule view">
+                <button
+                  type="button"
+                  className={planView === "cards" ? "active" : ""}
+                  aria-pressed={planView === "cards"}
+                  onClick={() => setPlanView("cards")}
+                >
+                  Swipe cards
+                </button>
+                <button
+                  type="button"
+                  className={planView === "list" ? "active" : ""}
+                  aria-pressed={planView === "list"}
+                  onClick={() => setPlanView("list")}
+                >
+                  List
+                </button>
+              </div>
             </div>
 
             <div className="day-picker" aria-label="Choose trip day" ref={dayPickerRef}>
@@ -882,7 +949,11 @@ export default function TripPlanner() {
                 <div className="mode-switch" aria-label="Choose the August 15 home route">
                   <div>
                     <strong>August 15 needs a route choice</strong>
-                    <span>Home is not specified, so the named meal, fuel, and rest stops follow the corridor you select.</span>
+                    <span>
+                      Google prefers US-287 → DFW → I-45 via Wichita Falls (~35 mi shorter,
+                      verified Aug 2026); the Abilene corridor repeats the outbound roads. The
+                      named stops follow whichever you pick.
+                    </span>
                   </div>
                   <div>
                     <button
@@ -903,109 +974,234 @@ export default function TripPlanner() {
                 </div>
               )}
 
-              <div className="timeline">
-                {activeEvents.map((event) => {
-                  const isChecked = shared.checked.includes(event.id);
-                  const eventPlace = event.placeId
-                    ? places.find((place) => place.id === event.placeId)
-                    : undefined;
-                  const eventDirections = eventPlace
-                    ? placeDirectionsHref(eventPlace)
-                    : event.mapQuery
-                      ? directionsHref(event.mapQuery)
-                      : undefined;
-                  const eventLocationName =
-                    event.locationName ?? eventPlace?.name ?? (event.mapQuery ? event.title : undefined);
-                  const eventLocationDetail = event.locationDetail ?? eventPlace?.city;
-                  const scheduleOptions = (event.alternatives ?? []).filter(
-                    (option) =>
-                      !option.route || activeDay.id !== "aug-15" || option.route === homeRoute,
-                  );
-                  return (
-                    <div className={`timeline-row ${isChecked ? "completed" : ""}`} key={event.id}>
-                      <div className={`timeline-icon kind-${event.kind}`}>
-                        <EventIcon kind={event.kind} />
-                      </div>
-                      <div className="timeline-content">
-                        <div className="timeline-title-row">
-                          <span className="timeline-time">{event.time}</span>
-                          {event.duration && <span className="timeline-duration">{event.duration}</span>}
-                        </div>
-                        <h4>{event.title}</h4>
-                        <p>{event.detail}</p>
-                        {eventDirections && eventLocationName && (
-                          <a
-                            className="timeline-location"
-                            href={eventDirections}
-                            target="_blank"
-                            rel="noreferrer"
+              {planView === "cards" ? (
+                <div className="event-deck-wrap">
+                  <div
+                    className="event-deck"
+                    ref={deckRef}
+                    aria-label={`Swipe through the ${enrichedEvents.length} stops on ${activeDay.title}`}
+                  >
+                    {enrichedEvents.map(
+                      ({ event, directions, locationName, locationDetail, options, image }, index) => {
+                        const isChecked = shared.checked.includes(event.id);
+                        return (
+                          <article
+                            className={`event-card ${isChecked ? "completed" : ""}`}
+                            key={event.id}
                           >
-                            <MapPinned aria-hidden="true" />
-                            <span>
-                              <strong>{eventLocationName}</strong>
-                              {eventLocationDetail && <small>{eventLocationDetail}</small>}
-                            </span>
-                            <Navigation aria-hidden="true" />
-                          </a>
-                        )}
-                        {(event.note || event.href || eventDirections) && (
-                          <div className="timeline-meta">
-                            {event.note && <em>{event.note}</em>}
-                            {eventDirections && (
-                              <a href={eventDirections} target="_blank" rel="noreferrer">
-                                Directions <Navigation aria-hidden="true" />
-                              </a>
-                            )}
-                            {event.href && (
-                              <a href={event.href} target="_blank" rel="noreferrer">
-                                {event.linkLabel ?? "Source"} <ExternalLink aria-hidden="true" />
-                              </a>
-                            )}
-                          </div>
-                        )}
-                        {scheduleOptions.length > 0 && (
-                          <aside className="timeline-options" aria-label={`Options for ${event.title}`}>
-                            <strong>{event.optionsLabel ?? "Named alternatives"}</strong>
-                            <div>
-                              {scheduleOptions.map((option) => (
-                                <div className="timeline-option" key={`${event.id}-${option.name}`}>
-                                  <a
-                                    href={directionsHref(option.mapQuery)}
-                                    target="_blank"
-                                    rel="noreferrer"
-                                  >
-                                    <span>
-                                      <b>{option.name}</b>
-                                      <small>{option.detail}</small>
-                                    </span>
-                                    <Navigation aria-hidden="true" />
-                                  </a>
-                                  {option.href && (
-                                    <a
-                                      className="timeline-option-source"
-                                      href={option.href}
-                                      target="_blank"
-                                      rel="noreferrer"
-                                    >
-                                      {option.linkLabel ?? "Info"} <ExternalLink aria-hidden="true" />
+                            <div className={`event-card-media kind-${event.kind}`}>
+                              {image ? (
+                                // eslint-disable-next-line @next/next/no-img-element -- static export uses relative public/ paths; next/image adds nothing here
+                                <img src={image.src} alt={image.alt} loading="lazy" />
+                              ) : (
+                                <EventIcon kind={event.kind} />
+                              )}
+                              <span className="event-card-step">
+                                {index + 1} / {enrichedEvents.length}
+                              </span>
+                              {image && <span className="event-card-credit">{image.credit}</span>}
+                              <CheckButton
+                                id={event.id}
+                                checked={isChecked}
+                                onToggle={toggleChecked}
+                                label={event.title}
+                              />
+                            </div>
+                            <div className="event-card-body">
+                              <div className="timeline-title-row">
+                                <span className="timeline-time">{event.time}</span>
+                                {event.duration && (
+                                  <span className="timeline-duration">{event.duration}</span>
+                                )}
+                              </div>
+                              <h4>{event.title}</h4>
+                              <p>{event.detail}</p>
+                              {directions && locationName && (
+                                <a
+                                  className="timeline-location"
+                                  href={directions}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                >
+                                  <MapPinned aria-hidden="true" />
+                                  <span>
+                                    <strong>{locationName}</strong>
+                                    {locationDetail && <small>{locationDetail}</small>}
+                                  </span>
+                                  <Navigation aria-hidden="true" />
+                                </a>
+                              )}
+                              {(event.note || event.href) && (
+                                <div className="timeline-meta">
+                                  {event.note && <em>{event.note}</em>}
+                                  {event.href && (
+                                    <a href={event.href} target="_blank" rel="noreferrer">
+                                      {event.linkLabel ?? "Source"}{" "}
+                                      <ExternalLink aria-hidden="true" />
                                     </a>
                                   )}
                                 </div>
-                              ))}
+                              )}
+                              {options.length > 0 && (
+                                <div className="option-swiper-block">
+                                  <strong>{event.optionsLabel ?? "Named alternatives"}</strong>
+                                  <div
+                                    className="option-swiper"
+                                    aria-label={`Swipe through options for ${event.title}`}
+                                  >
+                                    {options.map((option) => (
+                                      <div className="option-card" key={`${event.id}-${option.name}`}>
+                                        <a
+                                          className="option-card-main"
+                                          href={directionsHref(option.mapQuery)}
+                                          target="_blank"
+                                          rel="noreferrer"
+                                        >
+                                          <b>{option.name}</b>
+                                          <small>{option.detail}</small>
+                                        </a>
+                                        {option.href && (
+                                          <a
+                                            className="option-card-source"
+                                            href={option.href}
+                                            target="_blank"
+                                            rel="noreferrer"
+                                          >
+                                            {option.linkLabel ?? "Info"}{" "}
+                                            <ExternalLink aria-hidden="true" />
+                                          </a>
+                                        )}
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
                             </div>
-                          </aside>
-                        )}
-                      </div>
-                      <CheckButton
-                        id={event.id}
-                        checked={isChecked}
-                        onToggle={toggleChecked}
-                        label={event.title}
-                      />
-                    </div>
-                  );
-                })}
-              </div>
+                          </article>
+                        );
+                      },
+                    )}
+                  </div>
+                  <div className="deck-controls">
+                    <button
+                      type="button"
+                      onClick={() => nudgeDeck(-1)}
+                      aria-label="Previous event card"
+                    >
+                      <ChevronLeft aria-hidden="true" />
+                    </button>
+                    <span>
+                      Swipe or use the arrows · {enrichedEvents.length} stops on this day
+                    </span>
+                    <button type="button" onClick={() => nudgeDeck(1)} aria-label="Next event card">
+                      <ChevronRight aria-hidden="true" />
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="timeline">
+                  {enrichedEvents.map(
+                    ({ event, directions, locationName, locationDetail, options }) => {
+                      const isChecked = shared.checked.includes(event.id);
+                      return (
+                        <div
+                          className={`timeline-row ${isChecked ? "completed" : ""}`}
+                          key={event.id}
+                        >
+                          <div className={`timeline-icon kind-${event.kind}`}>
+                            <EventIcon kind={event.kind} />
+                          </div>
+                          <div className="timeline-content">
+                            <div className="timeline-title-row">
+                              <span className="timeline-time">{event.time}</span>
+                              {event.duration && (
+                                <span className="timeline-duration">{event.duration}</span>
+                              )}
+                            </div>
+                            <h4>{event.title}</h4>
+                            <p>{event.detail}</p>
+                            {directions && locationName && (
+                              <a
+                                className="timeline-location"
+                                href={directions}
+                                target="_blank"
+                                rel="noreferrer"
+                              >
+                                <MapPinned aria-hidden="true" />
+                                <span>
+                                  <strong>{locationName}</strong>
+                                  {locationDetail && <small>{locationDetail}</small>}
+                                </span>
+                                <Navigation aria-hidden="true" />
+                              </a>
+                            )}
+                            {(event.note || event.href || directions) && (
+                              <div className="timeline-meta">
+                                {event.note && <em>{event.note}</em>}
+                                {directions && (
+                                  <a href={directions} target="_blank" rel="noreferrer">
+                                    Directions <Navigation aria-hidden="true" />
+                                  </a>
+                                )}
+                                {event.href && (
+                                  <a href={event.href} target="_blank" rel="noreferrer">
+                                    {event.linkLabel ?? "Source"} <ExternalLink aria-hidden="true" />
+                                  </a>
+                                )}
+                              </div>
+                            )}
+                            {options.length > 0 && (
+                              <aside
+                                className="timeline-options"
+                                aria-label={`Options for ${event.title}`}
+                              >
+                                <strong>{event.optionsLabel ?? "Named alternatives"}</strong>
+                                <div>
+                                  {options.map((option) => (
+                                    <div
+                                      className="timeline-option"
+                                      key={`${event.id}-${option.name}`}
+                                    >
+                                      <a
+                                        href={directionsHref(option.mapQuery)}
+                                        target="_blank"
+                                        rel="noreferrer"
+                                      >
+                                        <span>
+                                          <b>{option.name}</b>
+                                          <small>{option.detail}</small>
+                                        </span>
+                                        <Navigation aria-hidden="true" />
+                                      </a>
+                                      {option.href && (
+                                        <a
+                                          className="timeline-option-source"
+                                          href={option.href}
+                                          target="_blank"
+                                          rel="noreferrer"
+                                        >
+                                          {option.linkLabel ?? "Info"}{" "}
+                                          <ExternalLink aria-hidden="true" />
+                                        </a>
+                                      )}
+                                    </div>
+                                  ))}
+                                </div>
+                              </aside>
+                            )}
+                          </div>
+                          <CheckButton
+                            id={event.id}
+                            checked={isChecked}
+                            onToggle={toggleChecked}
+                            label={event.title}
+                          />
+                        </div>
+                      );
+                    },
+                  )}
+                </div>
+              )}
             </article>
           </section>
         )}
@@ -1672,8 +1868,9 @@ export default function TripPlanner() {
                   <Navigation aria-hidden="true" /> Aug 15 meal stop
                 </h3>
                 <p>
-                  The home city isn’t locked in, so both corridors stay planned. Pick the one
-                  that matches the final route.
+                  Route check (Aug 2026): the Wichita Falls → DFW → I-45 corridor is Google&apos;s
+                  preferred pick and ~35 miles shorter; via Abilene repeats the outbound roads.
+                  Both stay planned—pick what matches the day.
                 </p>
                 <div className="segmented" role="group" aria-label="Choose the home route">
                   <button

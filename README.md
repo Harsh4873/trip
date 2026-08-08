@@ -4,8 +4,10 @@ A temporary, standalone trip planner for August 8–15, 2026. It is intentionall
 
 ## What is included
 
-- the fixed dates, destinations, mileage, drive times, and lodging sequence from the original plan
-- a researched daily schedule with realistic stop, meal, check-in, rest, and weather buffers
+- the fixed dates, destinations, mileage, drive times, and lodging sequence from the original plan (Lubbock lodging verified as Homewood Suites by Hilton, 5320 W Loop 289—free hot breakfast included)
+- a researched daily schedule with realistic stop, meal, check-in, rest, and weather buffers, viewable as a classic list **or a swipeable photo-card deck** (one card per event, alternatives as a mini-swiper inside each card)
+- **route-verified stops**: every named travel center and meal option was checked against the actual routing geometry (OSRM, Aug 2026)—off-corridor options like the Dallas-direction Buc-ee's Hillsboro were replaced with on-route ones (Bastrop/Waller), and the return leg defaults to the ~35-mile-shorter Wichita Falls → I-45 corridor
+- **real photos** for 17 attractions from Wikimedia Commons (free licenses, credits shown on each image), bundled locally so they work offline
 - a **Weather & sky** tab: NOAA 1991–2020 August normals per stop, live 16-day Open-Meteo forecasts (keyless, client-side, localStorage-cached), live NWS watches/warnings per stop, a monsoon-rhythm explainer, USNO-verified sunrise/sunset for every trip day, nightly moon phases, and the 2026 Perseid peak (new moon on Aug 12 — the first moonless maximum since 2018)
 - per-day conditions on every schedule card: sunrise/sunset, typical temps, the storm window, plus the live forecast and any NWS alert once dates are in range
 - vegetarian-only food guidance with an Indian-first focus

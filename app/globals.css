@@ -301,6 +301,13 @@ body.access-locked { overflow: hidden; }
 .panel-head { margin-bottom: 22px; }
 .panel-head h2 { margin: 0; font-size: 21px; letter-spacing: -0.01em; }
 .panel-head p { margin: 8px 0 0; max-width: 68ch; color: var(--muted); font-size: 14px; }
+.panel-head-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+}
 
 /* ——— Day picker ——— */
 
@@ -458,8 +465,8 @@ body.access-locked { overflow: hidden; }
   margin: 14px 24px 0;
   padding: 14px 15px;
   border-radius: var(--radius-md);
-  background: #f4f8f4;
-  border: 1px solid #d6e5d8;
+  background: var(--accent-soft);
+  border: 1px solid var(--line);
 }
 .day-tips-heading {
   display: flex;
@@ -566,9 +573,9 @@ body.access-locked { overflow: hidden; }
 .timeline-location {
   margin-top: 10px;
   padding: 9px 10px;
-  border: 1px solid #d6e5d8;
+  border: 1px solid var(--line);
   border-radius: var(--radius-sm);
-  background: #f4f8f4;
+  background: var(--accent-soft);
   display: grid;
   grid-template-columns: 16px minmax(0, 1fr) 15px;
   align-items: center;
@@ -647,6 +654,160 @@ body.access-locked { overflow: hidden; }
 .check-button.is-checked { color: white; border-color: var(--accent-strong); background: var(--accent-strong); }
 .timeline-row.completed .timeline-content { opacity: 0.55; }
 .timeline-row.completed h4 { text-decoration: line-through; }
+
+/* ——— Event card deck (swipe view) ——— */
+
+.event-deck-wrap { padding: 16px 24px 20px; }
+.event-deck {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: min(88%, 400px);
+  gap: 14px;
+  overflow-x: auto;
+  padding: 4px;
+  scroll-snap-type: x mandatory;
+  scroll-padding-inline: 4px;
+  scrollbar-width: none;
+}
+.event-deck::-webkit-scrollbar { display: none; }
+.event-card {
+  scroll-snap-align: center;
+  border-radius: var(--radius-lg);
+  background: var(--card);
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.event-card-media {
+  position: relative;
+  height: 172px;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  color: white;
+  overflow: hidden;
+}
+.event-card-media img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.event-card-media > svg { width: 42px; height: 42px; opacity: 0.9; }
+.event-card-step {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: rgba(16, 20, 16, 0.55);
+  color: white;
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+}
+.event-card-credit {
+  position: absolute;
+  bottom: 5px;
+  right: 8px;
+  max-width: 75%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 9.5px;
+  color: rgba(255, 255, 255, 0.85);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.7);
+}
+.event-card-media .check-button {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  margin: 0;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+}
+.event-card-body {
+  padding: 14px 16px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  flex: 1;
+}
+.event-card-body h4 { margin: 0; font-size: 17px; line-height: 1.3; }
+.event-card-body > p { margin: 0; color: var(--muted); font-size: 13.5px; }
+.event-card.completed .event-card-body { opacity: 0.55; }
+.event-card.completed h4 { text-decoration: line-through; }
+
+.option-swiper-block { margin-top: auto; display: grid; gap: 7px; padding-top: 4px; }
+.option-swiper-block > strong {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.option-swiper {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  padding: 2px;
+  scrollbar-width: none;
+}
+.option-swiper::-webkit-scrollbar { display: none; }
+.option-card {
+  flex: 0 0 80%;
+  scroll-snap-align: start;
+  border-radius: var(--radius-md);
+  background: var(--bg);
+  border: 1px solid var(--line);
+  display: grid;
+}
+.option-card-main {
+  padding: 10px 12px 8px;
+  display: grid;
+  gap: 2px;
+  text-decoration: none;
+  color: inherit;
+}
+.option-card-main b { font-size: 13px; line-height: 1.3; }
+.option-card-main small { color: var(--muted); font-size: 12px; }
+.option-card:hover { border-color: var(--accent); }
+.option-card-source {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 12px 9px;
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 600;
+  text-decoration: none;
+}
+.option-card-source svg { width: 11px; height: 11px; }
+.option-card-source:hover { text-decoration: underline; }
+
+.deck-controls {
+  margin-top: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.deck-controls button {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  border: 1px solid var(--line);
+  background: var(--card);
+  display: grid;
+  place-items: center;
+}
+.deck-controls button svg { width: 18px; height: 18px; }
+.deck-controls button:hover { border-color: var(--accent); color: var(--accent); }
+.deck-controls span { color: var(--muted); font-size: 12.5px; text-align: center; }
 
 /* ——— Food & attractions ——— */
 
@@ -764,6 +925,21 @@ body.access-locked { overflow: hidden; }
   box-shadow: var(--shadow);
   display: flex;
   flex-direction: column;
+  overflow: hidden;
+}
+.place-photo {
+  position: relative;
+  margin: -18px -18px 14px;
+  height: 140px;
+}
+.place-photo img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.place-photo span {
+  position: absolute;
+  bottom: 4px;
+  right: 8px;
+  font-size: 9.5px;
+  color: rgba(255, 255, 255, 0.85);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.7);
 }
 .place-card.is-closed { background: var(--bg); box-shadow: none; }
 .place-card.is-closed h3 { color: var(--muted); }
@@ -1463,6 +1639,9 @@ footer strong { color: var(--ink); }
   .day-summary { padding: 14px 18px; }
   .day-conditions { padding: 12px 18px; gap: 7px 14px; }
   .advisory, .mode-switch, .day-tips { margin-inline: 18px; }
+  .event-deck-wrap { padding: 14px 12px 16px; }
+  .event-deck { grid-auto-columns: 88%; }
+  .panel-head-row .segmented { order: -1; }
   .timeline { padding: 6px 18px 18px; }
   .timeline-row { grid-template-columns: 34px 1fr 40px; column-gap: 10px; }
   .timeline-icon { width: 32px; height: 32px; }

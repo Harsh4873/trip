@@ -139,6 +139,32 @@ test("keeps every travel-day meal restaurant-first and vegetarian", async () => 
   assert.match(data, /Pepito’s Mexican Restaurante/);
 });
 
+test("keeps the schedule route-verified and visual", async () => {
+  const [data, planner, images] = await Promise.all([
+    readFile(new URL("app/trip-data.ts", root), "utf8"),
+    readFile(new URL("app/TripPlanner.tsx", root), "utf8"),
+    readFile(new URL("app/place-images.ts", root), "utf8"),
+  ]);
+
+  // Verified lodging: Homewood Suites, not the old Hampton Inn guess.
+  assert.match(data, /Homewood Suites by Hilton Lubbock, 5320 W Loop 289/);
+  assert.doesNotMatch(data, /Hampton Inn/);
+  // Day-1 stops sit on the real Houston corridors (no Dallas-direction detour).
+  assert.match(data, /Buc-ee’s · Bastrop/);
+  assert.match(data, /Buc-ee’s · Waller/);
+  assert.doesNotMatch(data, /Hillsboro/);
+  // On-route alternative for the east-Amarillo Buc-ee's detour.
+  assert.match(data, /Russell's Truck & Travel Center · Glenrio/);
+  // The verified-shorter Wichita Falls corridor is the return default.
+  assert.match(planner, /useState<"abilene" \| "wichita">\("wichita"\)/);
+  // Swipe-card schedule view with photos and a nested options swiper.
+  assert.match(planner, /event-deck/);
+  assert.match(planner, /option-swiper/);
+  assert.match(planner, /placeImages/);
+  assert.match(images, /taos-pueblo/);
+  assert.match(images, /CC BY/);
+});
+
 test("keeps the site standalone and Pages-safe", async () => {
   const [config, workflow, layout, page, pinGate, packageJson] = await Promise.all([
     readFile(new URL("next.config.ts", root), "utf8"),
