@@ -5,7 +5,7 @@ A temporary, standalone trip planner for August 8–15, 2026. It is intentionall
 ## What is included
 
 - the fixed dates, destinations, mileage, drive times, and lodging sequence from the original plan (Lubbock lodging verified as Homewood Suites by Hilton, 5320 W Loop 289—free hot breakfast included)
-- a researched daily schedule with realistic stop, meal, check-in, rest, and weather buffers, viewable as a classic list **or a swipeable photo-card deck** (one card per event, alternatives as a mini-swiper inside each card)
+- a researched daily schedule with realistic stop, meal, check-in, rest, and weather buffers — **Cards** (a swipeable photo-card deck, the landing tab) and **Schedule** (the classic list) are separate tabs showing the same day
 - a **full-screen Tinder-style focus mode** (tap any card photo or the Full-screen button): the day's remaining stops as a stacked deck — swipe left to mark done (syncs the shared checklist), swipe right to send the card to the bottom of the deck for later
 - researched interaction physics in the deck: velocity-based flick commits (0.5 px/ms trailing-window), grab-point card rotation, spring snap-back, live next-card promotion, an Undo snackbar after done-swipes, haptic ticks on Android, keyboard arrows, and aria-live announcements
 - **installable as a home-screen app**: web app manifest scoped to /trip/ with any+maskable map-pin icons, iOS standalone support, day-progress bars, and calendar-style “Up next” markers on today's schedule
@@ -17,7 +17,7 @@ A temporary, standalone trip planner for August 8–15, 2026. It is intentionall
 - a source-linked food + attraction directory with 49+ choices, category/day/area/don't-miss search, route directions, vegetarian confidence labels, weather-safe alternatives, and date-rigid closures (Harwood, Nambé Falls, the TEXAS musical, the Bandelier shuttle) called out on the affected entries
 - verified 2026 event research: SWAIA Indian Market week (Aug 15–16), the Picuris Pueblo San Lorenzo feast day (Aug 10), the Tuesday Santa Fe Farmers' Market, Santa Fe Summer Scene, Meow Wolf as the monsoon rain backup, and confirmed Earthship/Taos Pueblo/Nambé hours and prices
 - a projected-coordinate SVG route map with a live "you are here" marker during the trip
-- day-specific “Know before you go” guidance, shared checklists with custom to-dos, trip-mode choices for Aug 13, a whole-trip budget sketch (fuel, lodging, food, tickets), home-route meal options, and live-condition links
+- day-specific “Know before you go” guidance, trip-mode choices for Aug 13, a whole-trip budget sketch (fuel, lodging, food, tickets), home-route meal options, and live-condition links (the pre-trip checklist tab retired on departure day; done-state still syncs through the shared Firestore board)
 - Firestore synchronization with browser/offline caching
 - automatic dark mode via `prefers-color-scheme`
 - `noindex` metadata because the site contains a future personal travel schedule

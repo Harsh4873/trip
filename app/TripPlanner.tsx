@@ -21,7 +21,7 @@ import {
   Droplets,
   ExternalLink,
   Gauge,
-  ListChecks,
+  Layers,
   MapPinned,
   Maximize2,
   Minus,
@@ -37,17 +37,15 @@ import {
   Sunrise,
   Sunset,
   Thermometer,
-  Trash2,
   Utensils,
   Wallet,
   WifiOff,
 } from "lucide-react";
 import { doc, onSnapshot, serverTimestamp, setDoc } from "firebase/firestore";
 import type { DocumentReference, DocumentData } from "firebase/firestore";
-import { FormEvent, KeyboardEvent, useEffect, useRef, useState } from "react";
+import { KeyboardEvent, useEffect, useRef, useState } from "react";
 import {
   areas,
-  checklistGroups,
   dayTips,
   liveLinks,
   places,
@@ -78,7 +76,7 @@ import {
   type StopForecast,
 } from "./weather";
 
-type TabId = "plan" | "explore" | "weather" | "checklist" | "info";
+type TabId = "cards" | "plan" | "explore" | "weather" | "info";
 type SyncStatus = "connecting" | "saving" | "synced" | "offline";
 type CustomTodo = { id: string; text: string };
 type SharedTripState = { checked: string[]; customTodos: CustomTodo[] };
@@ -95,10 +93,10 @@ const DAY_MS = 86_400_000;
 const TRIP_MILES = 1952;
 
 const tabs: { id: TabId; label: string; shortLabel: string; icon: typeof CalendarDays }[] = [
+  { id: "cards", label: "Cards", shortLabel: "Cards", icon: Layers },
   { id: "plan", label: "Schedule", shortLabel: "Schedule", icon: CalendarDays },
   { id: "explore", label: "Food & attractions", shortLabel: "Food", icon: MapPinned },
   { id: "weather", label: "Weather & sky", shortLabel: "Weather", icon: CloudSun },
-  { id: "checklist", label: "Checklist", shortLabel: "Checklist", icon: ListChecks },
   { id: "info", label: "Trip info", shortLabel: "Info", icon: Route },
 ];
 
@@ -296,9 +294,8 @@ function PlaceCard({ place }: { place: Place }) {
 }
 
 export default function TripPlanner() {
-  const [activeTab, setActiveTab] = useState<TabId>("plan");
+  const [activeTab, setActiveTab] = useState<TabId>("cards");
   const [selectedDay, setSelectedDay] = useState(0);
-  const [planView, setPlanView] = useState<"cards" | "list">("cards");
   const [focusOpen, setFocusOpen] = useState(false);
   const [dayThirteenMode, setDayThirteenMode] = useState<"relaxed" | "falls">("relaxed");
   const [query, setQuery] = useState("");
@@ -310,7 +307,6 @@ export default function TripPlanner() {
   const [hydrated, setHydrated] = useState(false);
   const [remoteReady, setRemoteReady] = useState(false);
   const [syncStatus, setSyncStatus] = useState<SyncStatus>("connecting");
-  const [customTodoText, setCustomTodoText] = useState("");
   const [clock, setClock] = useState<TripClock | null>(null);
   const [forecasts, setForecasts] = useState<Record<string, StopForecast>>({});
   const [alerts, setAlerts] = useState<Record<string, StopAlerts>>({});
@@ -488,28 +484,6 @@ export default function TripPlanner() {
     }));
   };
 
-  const addCustomTodo = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    const text = customTodoText.trim().slice(0, 100);
-    if (!text || shared.customTodos.length >= 30) return;
-    const id = `custom-${crypto.randomUUID()}`;
-    setShared((current) => ({ ...current, customTodos: [...current.customTodos, { id, text }] }));
-    setCustomTodoText("");
-  };
-
-  const removeCustomTodo = (id: string) => {
-    setShared((current) => ({
-      checked: current.checked.filter((item) => item !== id),
-      customTodos: current.customTodos.filter((item) => item.id !== id),
-    }));
-  };
-
-  const allChecklistItems = checklistGroups.flatMap((group) => group.items);
-  const checklistTotal = allChecklistItems.length + shared.customTodos.length;
-  const checklistDone = [...allChecklistItems, ...shared.customTodos].filter((item) =>
-    shared.checked.includes(item.id),
-  ).length;
-  const progress = checklistTotal ? Math.round((checklistDone / checklistTotal) * 100) : 0;
   const activeDay = tripDays[selectedDay];
   const activeEvents = activeDay.events.filter(
     (event) => !event.mode || event.mode === dayThirteenMode,
@@ -579,7 +553,7 @@ export default function TripPlanner() {
     const card = deck.querySelector<HTMLElement>(".event-card");
     const target = card ? upNextIndexRef.current * (card.offsetWidth + 14) : 0;
     deck.scrollTo({ left: target });
-  }, [selectedDay, planView, dayThirteenMode]);
+  }, [selectedDay, activeTab, dayThirteenMode]);
   // Shared enrichment for both schedule views (list rows and swipe cards).
   const enrichedEvents = activeEvents.map((event) => {
     const place = event.placeId ? places.find((item) => item.id === event.placeId) : undefined;
@@ -749,34 +723,20 @@ export default function TripPlanner() {
       </nav>
 
       <main id="main">
-        {activeTab === "plan" && (
-          <section className="panel" id="plan-panel" role="tabpanel" aria-labelledby="tab-plan">
-            <div className="panel-head panel-head-row">
-              <div>
-                <h2>Day by day</h2>
-                <p>
-                  Dates, destinations, mileage, and drive times are fixed. Times marked
-                  “suggested” are flexible.
-                </p>
-              </div>
-              <div className="segmented" role="group" aria-label="Choose the schedule view">
-                <button
-                  type="button"
-                  className={planView === "cards" ? "active" : ""}
-                  aria-pressed={planView === "cards"}
-                  onClick={() => setPlanView("cards")}
-                >
-                  Swipe cards
-                </button>
-                <button
-                  type="button"
-                  className={planView === "list" ? "active" : ""}
-                  aria-pressed={planView === "list"}
-                  onClick={() => setPlanView("list")}
-                >
-                  List
-                </button>
-              </div>
+        {(activeTab === "cards" || activeTab === "plan") && (
+          <section
+            className="panel"
+            id={`${activeTab}-panel`}
+            role="tabpanel"
+            aria-labelledby={`tab-${activeTab}`}
+          >
+            <div className="panel-head">
+              <h2>{activeTab === "cards" ? "Swipe the day" : "Day by day"}</h2>
+              <p>
+                {activeTab === "cards"
+                  ? "One card per stop—swipe through the day, tap a photo for the full-screen deck. The Schedule tab shows the same day as a list."
+                  : "Dates, destinations, mileage, and drive times are fixed. Times marked “suggested” are flexible."}
+              </p>
             </div>
 
             <div className="day-picker" aria-label="Choose trip day" ref={dayPickerRef}>
@@ -1000,7 +960,7 @@ export default function TripPlanner() {
                 </div>
               )}
 
-              {planView === "cards" ? (
+              {activeTab === "cards" ? (
                 <div className="event-deck-wrap">
                   <div
                     className="event-deck"
@@ -1616,133 +1576,6 @@ export default function TripPlanner() {
                     <strong>{perseids.title}</strong>
                     <p>{perseids.detail}</p>
                   </div>
-                </div>
-              </article>
-            </div>
-          </section>
-        )}
-
-        {activeTab === "checklist" && (
-          <section
-            className="panel"
-            id="checklist-panel"
-            role="tabpanel"
-            aria-labelledby="tab-checklist"
-          >
-            <div className="panel-head">
-              <h2>Checklist</h2>
-              <p>
-                Shared across devices—check something off here and it updates on everyone’s
-                phone. Reservations and live checks matter more than perfect packing.
-              </p>
-            </div>
-
-            <div className="progress-strip">
-              <div
-                className="progress-bar"
-                role="progressbar"
-                aria-valuenow={progress}
-                aria-valuemin={0}
-                aria-valuemax={100}
-                aria-label="Checklist progress"
-              >
-                <i style={{ width: `${progress}%` }} />
-              </div>
-              <span>
-                {checklistDone} of {checklistTotal} done
-              </span>
-            </div>
-
-            <div className="checklist-grid">
-              {checklistGroups.map((group) => {
-                const done = group.items.filter((item) => shared.checked.includes(item.id)).length;
-                return (
-                  <article className="checklist-card" key={group.title}>
-                    <div className="checklist-card-head">
-                      <div>
-                        <span>{group.eyebrow}</span>
-                        <h3>{group.title}</h3>
-                      </div>
-                      <strong>
-                        {done}/{group.items.length}
-                      </strong>
-                    </div>
-                    <div className="checklist-items">
-                      {group.items.map((item) => {
-                        const isChecked = shared.checked.includes(item.id);
-                        return (
-                          <button
-                            type="button"
-                            key={item.id}
-                            className={isChecked ? "checked" : ""}
-                            onClick={() => toggleChecked(item.id)}
-                          >
-                            <span className="box">{isChecked && <Check aria-hidden="true" />}</span>
-                            <span>{item.text}</span>
-                            {item.urgent && <span className="key-badge">key</span>}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </article>
-                );
-              })}
-
-              <article className="checklist-card custom-card">
-                <div className="checklist-card-head">
-                  <div>
-                    <span>Shared</span>
-                    <h3>Your own to-dos</h3>
-                  </div>
-                  <strong>
-                    {shared.customTodos.filter((item) => shared.checked.includes(item.id)).length}/
-                    {shared.customTodos.length}
-                  </strong>
-                </div>
-                <form className="add-todo" onSubmit={addCustomTodo}>
-                  <label htmlFor="custom-todo">Add something this trip needs</label>
-                  <div>
-                    <input
-                      id="custom-todo"
-                      value={customTodoText}
-                      maxLength={100}
-                      onChange={(event) => setCustomTodoText(event.target.value)}
-                      placeholder="Example: bring opera tickets"
-                    />
-                    <button
-                      type="submit"
-                      aria-label="Add custom task"
-                      disabled={!customTodoText.trim() || shared.customTodos.length >= 30}
-                    >
-                      <Plus aria-hidden="true" />
-                    </button>
-                  </div>
-                </form>
-                <div className="checklist-items custom-items">
-                  {shared.customTodos.length === 0 && (
-                    <p className="empty-state">
-                      Anything added here shows up on every synced device.
-                    </p>
-                  )}
-                  {shared.customTodos.map((item) => {
-                    const isChecked = shared.checked.includes(item.id);
-                    return (
-                      <div className={isChecked ? "custom-row checked" : "custom-row"} key={item.id}>
-                        <button type="button" onClick={() => toggleChecked(item.id)}>
-                          <span className="box">{isChecked && <Check aria-hidden="true" />}</span>
-                          <span>{item.text}</span>
-                        </button>
-                        <button
-                          type="button"
-                          className="delete-todo"
-                          onClick={() => removeCustomTodo(item.id)}
-                          aria-label={`Delete ${item.text}`}
-                        >
-                          <Trash2 aria-hidden="true" />
-                        </button>
-                      </div>
-                    );
-                  })}
                 </div>
               </article>
             </div>
