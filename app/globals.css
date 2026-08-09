@@ -1564,117 +1564,6 @@ body.focus-locked { overflow: hidden; }
 .perseids-callout strong { display: block; font-size: 13.5px; }
 .perseids-callout p { margin: 3px 0 0; color: var(--muted); font-size: 13px; }
 
-/* ——— Checklist ——— */
-
-.progress-strip { display: flex; align-items: center; gap: 14px; margin-bottom: 18px; }
-.progress-bar {
-  flex: 1;
-  height: 8px;
-  border-radius: 999px;
-  background: var(--line);
-  overflow: hidden;
-}
-.progress-bar i { display: block; height: 100%; background: var(--accent-strong); border-radius: inherit; transition: width 0.4s ease; }
-.progress-strip > span { color: var(--muted); font-size: 13.5px; font-weight: 600; white-space: nowrap; }
-
-.checklist-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; }
-.checklist-card {
-  border-radius: var(--radius-lg);
-  background: var(--card);
-  border: 1px solid var(--line);
-  box-shadow: var(--shadow);
-  padding: 18px;
-}
-.checklist-card-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 12px;
-}
-.checklist-card-head span { color: var(--muted); font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; }
-.checklist-card-head h3 { margin: 2px 0 0; font-size: 17px; }
-.checklist-card-head > strong { color: var(--muted); font-size: 13.5px; }
-.checklist-items { display: grid; gap: 6px; }
-.checklist-items > button, .custom-row > button:first-child {
-  width: 100%;
-  min-height: 48px;
-  padding: 10px 12px;
-  border: 1px solid transparent;
-  border-radius: var(--radius-md);
-  background: var(--bg);
-  display: grid;
-  grid-template-columns: 22px 1fr auto;
-  gap: 10px;
-  align-items: center;
-  text-align: left;
-  font-size: 14px;
-}
-.checklist-items > button:hover, .custom-row > button:first-child:hover { border-color: var(--accent); }
-.box {
-  width: 22px;
-  height: 22px;
-  display: grid;
-  place-items: center;
-  border: 1.5px solid var(--box-line);
-  border-radius: 6px;
-  background: var(--card);
-  color: white;
-}
-.box svg { width: 14px; height: 14px; }
-.checklist-items button.checked, .custom-row.checked > button:first-child { color: var(--muted); text-decoration: line-through; }
-.checked .box { background: var(--accent-strong); border-color: var(--accent-strong); }
-.key-badge {
-  padding: 2px 8px;
-  border-radius: 999px;
-  background: var(--terra-soft);
-  color: var(--terra);
-  font-size: 11px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
-.add-todo { margin-bottom: 10px; }
-.add-todo label { display: block; margin-bottom: 7px; color: var(--muted); font-size: 13px; font-weight: 600; }
-.add-todo > div { display: flex; gap: 8px; }
-.add-todo input {
-  flex: 1;
-  min-width: 0;
-  min-height: 44px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-md);
-  background: var(--card);
-  color: var(--ink);
-  padding: 0 12px;
-  outline: none;
-  font-size: 14px;
-}
-.add-todo input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--ring); }
-.add-todo button {
-  width: 44px;
-  min-height: 44px;
-  border: 0;
-  border-radius: var(--radius-md);
-  background: var(--accent-strong);
-  color: white;
-  display: grid;
-  place-items: center;
-}
-.add-todo button:disabled { opacity: 0.4; cursor: not-allowed; }
-.add-todo svg { width: 18px; height: 18px; }
-.empty-state { margin: 8px 2px; color: var(--muted); font-size: 13.5px; }
-.custom-row { display: grid; grid-template-columns: 1fr 44px; gap: 6px; }
-.delete-todo {
-  border: 1px solid transparent;
-  border-radius: var(--radius-md);
-  background: var(--terra-soft);
-  color: var(--terra);
-  display: grid;
-  place-items: center;
-}
-.delete-todo:hover { border-color: var(--terra); }
-.delete-todo svg { width: 16px; height: 16px; }
-
 /* ——— Trip info ——— */
 
 .route-board {
@@ -1914,7 +1803,7 @@ footer strong { color: var(--ink); }
   .day-facts > div:nth-child(2n) { border-right: 0; }
   .day-facts > div:nth-child(-n + 2) { border-bottom: 1px solid var(--line); }
   .day-tips-grid { grid-template-columns: 1fr; }
-  .checklist-grid, .info-grid, .stop-weather-grid, .sky-grid { grid-template-columns: 1fr; }
+  .info-grid, .stop-weather-grid, .sky-grid { grid-template-columns: 1fr; }
   .live-link-grid { grid-template-columns: repeat(2, 1fr); }
   .monsoon-rhythm { grid-template-columns: 1fr; }
 }
@@ -1992,7 +1881,7 @@ footer strong { color: var(--ink); }
   .map-stop-sub { font-size: 16px; }
 
   /* 16px inputs prevent iOS Safari from zooming the page on focus. */
-  .search-box input, .day-select select, .add-todo input, .input-pair input { font-size: 16px; }
+  .search-box input, .day-select select, .input-pair input { font-size: 16px; }
 
   .access-page { padding: 16px; }
   .access-backdrop-hero { grid-template-columns: 1fr; }
