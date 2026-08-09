@@ -246,7 +246,10 @@ export const tripDays: TripDay[] = [
       label: "Open drive route",
       origin: "Homewood Suites by Hilton Lubbock, 5320 W Loop 289, Lubbock, TX 79424",
       destination: "Dreamcatcher Bed and Breakfast, Taos, NM",
-      waypoints: ["San Francisco de Asis Church, Ranchos de Taos, NM"],
+      waypoints: [
+        "Costco Gas Station, 6020 34th St, Lubbock, TX 79407",
+        "San Francisco de Asis Church, Ranchos de Taos, NM",
+      ],
     },
     miles: "353 mi",
     wheelTime: "6 hr",
@@ -263,15 +266,29 @@ export const tripDays: TripDay[] = [
         time: "8:00 AM CDT",
         title: "Depart Lubbock",
         detail:
-          "Choose the Las Vegas restaurant lunch before departure so the food stop is as deliberate as the fuel and restroom resets.",
+          "Grab the hotel's free hot breakfast at opening, then roll—the Costco fill-up is the first stop. Choose the Las Vegas restaurant lunch before departure so the food stop is as deliberate as the resets.",
         kind: "drive",
+      },
+      {
+        id: "0809-costco",
+        time: "8:05 AM CDT",
+        title: "Costco fill-up · 6 min from the hotel",
+        detail:
+          "Route-checked this morning: Costco sits 2.2 mi / 6 min up the loop from the Homewood Suites and adds only 0.7 mi total to the Taos route—fuel up, then Loop 289 N feeds straight onto US-84 toward Clovis. Sunday gas hours 6 AM–7:30 PM; membership card required.",
+        kind: "rest",
+        duration: "15 min",
+        locationName: "Costco Gasoline · Lubbock",
+        locationDetail: "6020 34th St · Sun 6 AM–7:30 PM · members only",
+        mapQuery: "Costco Gas Station, 6020 34th St, Lubbock, TX 79407",
+        href: "https://www.costco.com/m/warehouse-locations/lubbock-tx-1163.html",
+        linkLabel: "Warehouse details",
       },
       {
         id: "0809-clovis-reset",
         time: "≈ 8:40 AM MDT",
         title: "Pilot Travel Center · Clovis",
         detail:
-          "First true reset after the New Mexico time change: fuel, restroom, coffee, stretch, and driver swap.",
+          "First reset after the New Mexico time change: restroom, coffee, stretch, and driver swap. Fuel is already handled at Costco—top up here only if the tank won't comfortably reach Las Vegas, NM.",
         kind: "rest",
         duration: "20 min",
         locationName: "Pilot Travel Center · Clovis #1118",
