@@ -59,9 +59,10 @@ test("UNVERIFIED flags exist in the data and render on the trip page", async () 
   assert.ok(unverifiedCount >= 15, `expected many UNVERIFIED facts, got ${unverifiedCount}`);
   assert.match(planner, /UNVERIFIED/);
   assert.match(planner, /badge-unverified/);
-  assert.match(data, /confirm Thanksgiving hours/);
-  assert.match(data, /confirm check-in/);
-  assert.match(planner, /chip-confirm/);
+  assert.match(data, /confirm Thanksgiving hours|Thanksgiving hours are UNVERIFIED/);
+  assert.match(data, /Confirm check-in|confirm checkout/);
+  assert.doesNotMatch(planner, /chip-confirm/);
+  assert.doesNotMatch(planner, /jump-nav/);
 });
 
 test("PinGate lazy-loads TripPlanner and does not inline trip content", async () => {
@@ -98,12 +99,46 @@ test("encodes the Bandera stay, diet, weather strip, and as-of stamp", async () 
   assert.match(data, /high near 73°F/);
 });
 
+test("starts and ends in Katy, not College Station", async () => {
+  const [data, planner, pinGate, layout, readme] = await Promise.all([
+    read("app/bandera-content.ts"),
+    read("app/TripPlanner.tsx"),
+    read("app/PinGate.tsx"),
+    read("app/layout.tsx"),
+    read("README.md"),
+  ]);
+  const joined = `${data}\n${planner}\n${pinGate}\n${layout}\n${readme}`;
+  assert.doesNotMatch(joined, /College Station/);
+  assert.match(data, /originCity: "Katy, TX"/);
+  assert.match(data, /https:\/\/www\.google\.com\/maps\/dir\/Katy,\+TX\/675\+Flying\+L\+Dr,\+Bandera,\+TX\+78003/);
+  assert.match(data, /https:\/\/www\.google\.com\/maps\/dir\/675\+Flying\+L\+Dr,\+Bandera,\+TX\+78003\/Katy,\+TX/);
+  assert.match(data, /3 hours 57 minutes/);
+  assert.match(data, /3 hours 56 minutes/);
+  assert.match(data, /I-10 west \(Katy Freeway\)/);
+  assert.match(data, /H-E-B in Katy before noon/);
+});
+
+test("includes Pap's Italian Grill as a Fri\/Sat dinner, not a Thursday plan", async () => {
+  const data = await read("app/bandera-content.ts");
+  assert.match(data, /Pap's Italian Grill/);
+  assert.match(data, /632 TX-16, Bandera, TX 78003/);
+  assert.match(data, /\(830\) 796-9400/);
+  assert.match(data, /menusweb\.com\/restaurants\/paps-italian-grill-menu-bandera/);
+  assert.match(data, /Cheese ravioli/);
+  assert.match(data, /Spinach manicotti/);
+  assert.match(data, /Fettuccine alfredo/);
+  assert.match(data, /suggested Friday dinner/);
+  assert.match(data, /do not treat Pap's as Thursday dinner unless they confirm/);
+  assert.match(data, /Sauces and broth are unconfirmed|sauces and broth is UNVERIFIED/);
+});
+
 test("events cover Nov 26-29 only and do not promote later parades as this weekend", async () => {
   const data = await read("app/bandera-content.ts");
   assert.match(data, /Country Christmas in the Park/);
   assert.match(data, /Dickens on Main/);
   assert.match(data, /Kin Faux/);
   assert.match(data, /Rick Rice Band/);
+  assert.match(data, /Native American Heritage Day/);
   assert.match(data, /dates: \["2026-11-26"/);
   assert.doesNotMatch(data, /dates: \["2026-12-12"/);
   assert.match(data, /Cowboy Christmas Parade and Jubilee are Dec 11-12, after this trip/);
@@ -119,11 +154,23 @@ test("keeps source-linked food cards, OSRM drives, and local alerts", async () =
   assert.match(data, /Menupix/);
   assert.match(data, /Nachos de Frijoles/);
   assert.match(data, /Lowe's Market/);
-  assert.match(data, /4 hours 9 minutes/);
   assert.match(data, /reservation flag|reserve: true/);
   assert.match(data, /Wharton's Dock Road/);
   assert.match(data, /Lowe's Market closed Thanksgiving/);
   assert.match(data, /Hill Country SNA reopens 6:00 a.m. Thursday/);
+  assert.match(data, /Frontier Times Museum/);
+  assert.match(data, /Buc-ee's Luling/);
+});
+
+test("renders a simple day-by-day schedule without filter chips", async () => {
+  const planner = await read("app/TripPlanner.tsx");
+  assert.match(planner, /day-card/);
+  assert.match(planner, /day-row/);
+  assert.match(planner, /id="food"/);
+  assert.match(planner, /id="weather"/);
+  assert.match(planner, /id="alerts"/);
+  assert.match(planner, /id="links"/);
+  assert.doesNotMatch(planner, /chip-row|Chips /);
 });
 
 test("does not put the owner's name or personal contact on the page", async () => {
