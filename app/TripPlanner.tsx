@@ -2,1849 +2,452 @@
 
 import {
   AlertTriangle,
-  BedDouble,
   CalendarDays,
-  Check,
-  CheckCircle2,
-  ChevronLeft,
-  ChevronRight,
-  Circle,
-  Clock3,
-  Cloud,
-  CloudFog,
-  CloudLightning,
-  CloudRain,
-  CloudSnow,
+  CarFront,
   CloudSun,
-  Coffee,
-  Compass,
-  Droplets,
   ExternalLink,
-  Gauge,
-  Layers,
+  Leaf,
   MapPinned,
-  Maximize2,
-  Minus,
-  MoonStar,
-  Navigation,
-  Plus,
-  RefreshCw,
-  Route,
-  Search,
-  ShieldAlert,
-  Sparkles,
-  Sun,
-  Sunrise,
-  Sunset,
-  Thermometer,
+  Phone,
+  Snowflake,
   Utensils,
-  Wallet,
-  WifiOff,
 } from "lucide-react";
-import { doc, onSnapshot, serverTimestamp, setDoc } from "firebase/firestore";
-import type { DocumentReference, DocumentData } from "firebase/firestore";
-import { KeyboardEvent, useEffect, useRef, useState } from "react";
-import {
-  areas,
-  dayTips,
-  liveLinks,
-  places,
-  routeStops,
-  tripDays,
-  type Area,
-  type EventKind,
-  type Place,
-  type PlaceCategory,
-} from "./trip-data";
-import RouteMap from "./RouteMap";
-import FocusDeck from "./FocusDeck";
-import { directionsHref, placeDirectionsHref, routeHref } from "./maps";
-import { placeImages } from "./place-images";
-import {
-  dayAlmanacs,
-  forecastWindowNote,
-  moonNights,
-  perseids,
-  stopAlmanacs,
-  stopTripDates,
-} from "./almanac-data";
-import {
-  describeWeatherCode,
-  loadAlerts,
-  loadForecasts,
-  type StopAlerts,
-  type StopForecast,
-} from "./weather";
+import { useEffect, useState } from "react";
+import type {
+  BanderaContent,
+  DriveRow,
+  FoodCard,
+  ItineraryItem,
+  SourceLink,
+} from "./bandera-content";
 
-type TabId = "cards" | "plan" | "explore" | "weather" | "info";
-type SyncStatus = "connecting" | "saving" | "synced" | "offline";
-type CustomTodo = { id: string; text: string };
-type SharedTripState = { checked: string[]; customTodos: CustomTodo[] };
-type TripClock = { daysUntil: number; dayIndex: number; now: number };
-
-const EMPTY_STATE: SharedTripState = { checked: [], customTodos: [] };
-const STORAGE_KEY = "harsh-trip-2026-state-v1";
-const BOARD_PATH = ["tripBoards", "new-mexico-2026"] as const;
-// Trip days roll over at 3 AM Central / 2 AM Mountain, not midnight, so late
-// nights—including the 2–5 AM Perseid window—stay with the day they belong
-// to, and "Today" doesn't flip an hour early during the Mountain Time leg.
-const TRIP_START = new Date("2026-08-08T03:00:00-05:00").getTime();
-const DAY_MS = 86_400_000;
-const TRIP_MILES = 1952;
-
-const tabs: { id: TabId; label: string; shortLabel: string; icon: typeof CalendarDays }[] = [
-  { id: "cards", label: "Cards", shortLabel: "Cards", icon: Layers },
-  { id: "plan", label: "Schedule", shortLabel: "Schedule", icon: CalendarDays },
-  { id: "explore", label: "Food & attractions", shortLabel: "Food", icon: MapPinned },
-  { id: "weather", label: "Weather & sky", shortLabel: "Weather", icon: CloudSun },
-  { id: "info", label: "Trip info", shortLabel: "Info", icon: Route },
-];
-
-const forecastIcons = {
-  clear: Sun,
-  cloud: Cloud,
-  fog: CloudFog,
-  rain: CloudRain,
-  snow: CloudSnow,
-  storm: CloudLightning,
-} as const;
-
-function tripDateLabel(date: string) {
-  const dayId = dayAlmanacs.find((entry) => entry.date === date)?.dayId;
-  const day = tripDays.find((tripDay) => tripDay.id === dayId);
-  return day ? `${day.weekday.slice(0, 3)} ${Number(day.shortDate)}` : String(Number(date.slice(8)));
-}
-
-const dietaryLabels = {
-  "vegetarian-first": "Vegetarian-first",
-  "vegan-options": "Vegan options",
-  "confirm-ghee": "Confirm ghee",
-  "confirm-lard": "Confirm lard",
-} as const;
-
-const coreRouteHref = routeHref({
-  origin: "Lubbock, TX",
-  destination: "Palo Duro Canyon State Park, TX",
-  waypoints: ["Taos, NM", "Santa Fe, NM", "Albuquerque, NM"],
-});
-
-function cleanSharedState(value: unknown): SharedTripState {
-  if (!value || typeof value !== "object") return EMPTY_STATE;
-
-  const input = value as Partial<SharedTripState>;
-  const checked = Array.isArray(input.checked)
-    ? input.checked.filter((item): item is string => typeof item === "string").slice(0, 200)
-    : [];
-  const customTodos = Array.isArray(input.customTodos)
-    ? input.customTodos
-        .filter(
-          (item): item is CustomTodo =>
-            Boolean(item) &&
-            typeof item === "object" &&
-            typeof (item as CustomTodo).id === "string" &&
-            typeof (item as CustomTodo).text === "string",
-        )
-        .map((item) => ({ id: item.id.slice(0, 80), text: item.text.trim().slice(0, 100) }))
-        .filter((item) => item.text.length > 0)
-        .slice(0, 30)
-    : [];
-
-  return { checked: [...new Set(checked)], customTodos };
-}
-
-function stateKey(value: SharedTripState) {
-  return JSON.stringify({
-    checked: [...value.checked].sort(),
-    customTodos: value.customTodos,
-  });
-}
-
-function EventIcon({ kind }: { kind: EventKind }) {
-  const icons = {
-    drive: Navigation,
-    food: Utensils,
-    stay: BedDouble,
-    explore: Compass,
-    rest: Coffee,
-    alert: AlertTriangle,
-  };
-  const Icon = icons[kind];
-  return <Icon aria-hidden="true" />;
-}
-
-function SyncPill({ status }: { status: SyncStatus }) {
-  const copy = {
-    connecting: "Connecting",
-    saving: "Saving",
-    synced: "Synced",
-    offline: "Offline · saved on this device",
-  };
-  const Icon = status === "offline" ? WifiOff : status === "synced" ? CheckCircle2 : RefreshCw;
-
+function Sources({ links }: { links: SourceLink[] }) {
+  if (!links.length) return null;
   return (
-    <div className={`sync-pill sync-${status}`} aria-live="polite">
-      <Icon aria-hidden="true" />
-      <span>{copy[status]}</span>
+    <ul className="source-list">
+      {links.map((link) => (
+        <li key={`${link.href}:${link.label}`}>
+          <a href={link.href} target="_blank" rel="noopener noreferrer">
+            {link.label}
+            <ExternalLink aria-hidden="true" />
+          </a>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function Unverified({ reason }: { reason?: string }) {
+  return (
+    <span className="badge-unverified">
+      UNVERIFIED
+      {reason ? <span className="badge-reason">{reason}</span> : null}
+    </span>
+  );
+}
+
+function Chips({ chips }: { chips?: string[] }) {
+  if (!chips?.length) return null;
+  return (
+    <div className="chip-row">
+      {chips.map((chip) => (
+        <span key={chip} className="chip chip-confirm">
+          {chip}
+        </span>
+      ))}
     </div>
   );
 }
 
-function CheckButton({
-  id,
-  checked,
-  onToggle,
-  label,
-}: {
-  id: string;
-  checked: boolean;
-  onToggle: (id: string) => void;
-  label: string;
-}) {
+function ItemCard({ item }: { item: ItineraryItem }) {
   return (
-    <button
-      type="button"
-      className={`check-button ${checked ? "is-checked" : ""}`}
-      onClick={() => onToggle(id)}
-      aria-label={`${checked ? "Mark incomplete" : "Mark complete"}: ${label}`}
-      aria-pressed={checked}
-    >
-      {checked ? <Check aria-hidden="true" /> : <Circle aria-hidden="true" />}
-    </button>
-  );
-}
-
-function PlaceCard({ place }: { place: Place }) {
-  const meta = [place.city, place.hours, place.cost, place.duration].filter(Boolean).join(" · ");
-  const backupPlace = place.backupPlaceId ? places.find((item) => item.id === place.backupPlaceId) : undefined;
-  const photo = placeImages[place.id];
-
-  return (
-    <article className={`place-card${place.closed ? " is-closed" : ""}`}>
-      {photo && !place.closed && (
-        <div className="place-photo">
-          {/* eslint-disable-next-line @next/next/no-img-element -- static export uses relative public/ paths */}
-          <img src={photo.src} alt={photo.alt} loading="lazy" />
-          <span>{photo.credit}</span>
-        </div>
-      )}
-      <div className="place-top">
-        <span className={`type-tag tag-${place.category}`}>
-          {place.category === "food" ? <Utensils aria-hidden="true" /> : <Compass aria-hidden="true" />}
-          {place.tag}
-        </span>
-        <small>{place.planned}</small>
-      </div>
-      <h3>{place.name}</h3>
-      {meta && <p className="place-meta">{meta}</p>}
-      {place.closed && (
-        <p className="closed-note">
-          <AlertTriangle aria-hidden="true" />
-          <span>{place.closed}</span>
-        </p>
-      )}
-      {place.dishes && (
-        <ul className="dish-list">
-          {place.dishes.map((dish) => (
-            <li key={dish}>{dish}</li>
-          ))}
-        </ul>
-      )}
-      <p className="place-note">{place.note}</p>
-      {(place.dietary || place.effort || place.amenities) && (
-        <div className="place-details" aria-label={`Helpful details for ${place.name}`}>
-          {place.dietary?.map((tag) => <span key={tag}>{dietaryLabels[tag]}</span>)}
-          {place.effort && <span>{place.effort}</span>}
-          {place.amenities?.map((amenity) => <span key={amenity}>{amenity}</span>)}
-        </div>
-      )}
-      {place.practicalTip && (
-        <p className="place-tip">
-          <strong>Helpful tip</strong>
-          {place.practicalTip}
-        </p>
-      )}
-      {backupPlace && !place.closed && (
-        <p className="backup-note">
-          <strong>Plan B</strong>
-          <a href={placeDirectionsHref(backupPlace)} target="_blank" rel="noreferrer">
-            {backupPlace.name} <Navigation aria-hidden="true" />
-          </a>
-        </p>
-      )}
-      <div className="place-foot">
-        {place.mustDo && <span className="must-badge">Don’t miss</span>}
-        {!place.closed && (
-          <a className="card-link" href={placeDirectionsHref(place)} target="_blank" rel="noreferrer">
-            Directions <Navigation aria-hidden="true" />
-          </a>
-        )}
-        {place.href && (
-          <a className="card-link" href={place.href} target="_blank" rel="noreferrer">
-            Official info <ExternalLink aria-hidden="true" />
-          </a>
-        )}
-        {place.reservationHref && (
-          <a className="card-link" href={place.reservationHref} target="_blank" rel="noreferrer">
-            Find a reservation <ExternalLink aria-hidden="true" />
-          </a>
-        )}
-      </div>
+    <article className="stop">
+      <p className="stop-time">{item.time}</p>
+      <h3>{item.title}</h3>
+      <Chips chips={item.chips} />
+      {item.unverified ? <Unverified reason={item.unverifiedReason} /> : null}
+      <p>{item.body}</p>
+      {item.callToConfirm ? <p className="call-line">{item.callToConfirm}</p> : null}
+      <Sources links={item.sources} />
     </article>
   );
 }
 
-export default function TripPlanner() {
-  const [activeTab, setActiveTab] = useState<TabId>("cards");
-  const [selectedDay, setSelectedDay] = useState(0);
-  const [focusOpen, setFocusOpen] = useState(false);
-  const [dayThirteenMode, setDayThirteenMode] = useState<"relaxed" | "falls">("relaxed");
-  const [query, setQuery] = useState("");
-  const [kindFilter, setKindFilter] = useState<PlaceCategory | "all">("all");
-  const [areaFilter, setAreaFilter] = useState<Area | "all">("all");
-  const [dayFilter, setDayFilter] = useState<string>("all");
-  const [mustOnly, setMustOnly] = useState(false);
-  const [shared, setShared] = useState<SharedTripState>(EMPTY_STATE);
-  const [hydrated, setHydrated] = useState(false);
-  const [remoteReady, setRemoteReady] = useState(false);
-  const [syncStatus, setSyncStatus] = useState<SyncStatus>("connecting");
-  const [clock, setClock] = useState<TripClock | null>(null);
-  const [forecasts, setForecasts] = useState<Record<string, StopForecast>>({});
-  const [alerts, setAlerts] = useState<Record<string, StopAlerts>>({});
-  const [mpg, setMpg] = useState(28);
-  const [gasPrice, setGasPrice] = useState(3.15);
-  const [travelers, setTravelers] = useState(4);
-  const [lodgingNight, setLodgingNight] = useState(150);
-  const [foodPerDay, setFoodPerDay] = useState(30);
-  const [ticketsBudget, setTicketsBudget] = useState(350);
-  // Wichita Falls/DFW/I-45 is Google's preferred return corridor (~35 mi
-  // shorter than the Abilene/US-84 variant), so it is the default.
-  const [homeRoute, setHomeRoute] = useState<"abilene" | "wichita">("wichita");
-  const stateRef = useRef(shared);
-  const boardRef = useRef<DocumentReference<DocumentData> | null>(null);
-  const lastRemoteKey = useRef("");
-  const dayPickerRef = useRef<HTMLDivElement | null>(null);
-  const deckRef = useRef<HTMLDivElement | null>(null);
-  const upNextIndexRef = useRef(0);
-
-  const nudgeDeck = (direction: -1 | 1) => {
-    const deck = deckRef.current;
-    const card = deck?.querySelector<HTMLElement>(".event-card");
-    if (!deck || !card) return;
-    deck.scrollBy({ left: direction * (card.offsetWidth + 14), behavior: "smooth" });
-  };
-
-  // Keep the selected day chip visible in the scrollable picker (phones).
-  useEffect(() => {
-    const container = dayPickerRef.current;
-    if (!container || container.scrollWidth <= container.clientWidth) return;
-    const active = container.querySelector<HTMLButtonElement>("button.active");
-    if (!active) return;
-    const target = active.offsetLeft - (container.clientWidth - active.offsetWidth) / 2;
-    container.scrollTo({ left: Math.max(0, target), behavior: "smooth" });
-  }, [selectedDay]);
-
-  useEffect(() => {
-    let localState = EMPTY_STATE;
-    try {
-      const localValue = window.localStorage.getItem(STORAGE_KEY);
-      if (localValue) localState = cleanSharedState(JSON.parse(localValue));
-    } catch {
-      // Firestore's cache still provides an offline path when localStorage is unavailable.
-    }
-    // During the trip, open straight to today's plan.
-    const todayIndex = Math.floor((Date.now() - TRIP_START) / DAY_MS);
-    queueMicrotask(() => {
-      setShared(localState);
-      setHydrated(true);
-      if (todayIndex >= 0 && todayIndex < tripDays.length) setSelectedDay(todayIndex);
-    });
-
-    const updateClock = () => {
-      const now = Date.now();
-      setClock({
-        daysUntil: Math.max(0, Math.ceil((TRIP_START - now) / DAY_MS)),
-        dayIndex: Math.floor((now - TRIP_START) / DAY_MS),
-        now,
-      });
-    };
-    updateClock();
-
-    const timer = window.setInterval(updateClock, 3_600_000);
-    return () => window.clearInterval(timer);
-  }, []);
-
-  useEffect(() => {
-    stateRef.current = shared;
-  }, [shared]);
-
-  // Live forecasts and NWS alerts are progressive enhancement: cached in
-  // localStorage, quiet on failure, with almanac normals as the fallback.
-  // Skip fetches that cannot produce anything useful: forecasts before the
-  // trip enters Open-Meteo's 16-day window, and everything once the trip is
-  // more than a week in the past.
-  useEffect(() => {
-    let cancelled = false;
-    const now = Date.now();
-    const tripEnd = TRIP_START + tripDays.length * DAY_MS;
-    if (now > tripEnd + 7 * DAY_MS) return;
-
-    if (now > TRIP_START - 16 * DAY_MS) {
-      void loadForecasts(stopAlmanacs).then((data) => {
-        if (!cancelled) setForecasts(data);
-      });
-    }
-    void loadAlerts(stopAlmanacs).then((data) => {
-      if (!cancelled) setAlerts(data);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  useEffect(() => {
-    let unsubscribe: (() => void) | undefined;
-    let cancelled = false;
-
-    void import("./firebase").then(({ tripDb }) => {
-      if (cancelled) return;
-      const board = doc(tripDb, ...BOARD_PATH);
-      boardRef.current = board;
-      unsubscribe = onSnapshot(
-        board,
-        { includeMetadataChanges: true },
-        (snapshot) => {
-          if (!snapshot.exists()) {
-            if (!snapshot.metadata.fromCache) {
-              lastRemoteKey.current = "";
-              setRemoteReady(true);
-            }
-            setSyncStatus(snapshot.metadata.fromCache ? "offline" : "saving");
-            return;
-          }
-
-          const remote = cleanSharedState(snapshot.data());
-          const remoteKey = stateKey(remote);
-          lastRemoteKey.current = remoteKey;
-          if (remoteKey !== stateKey(stateRef.current)) setShared(remote);
-          setRemoteReady(true);
-          setSyncStatus(
-            snapshot.metadata.hasPendingWrites
-              ? "saving"
-              : snapshot.metadata.fromCache
-                ? "offline"
-                : "synced",
-          );
-        },
-        () => {
-          setRemoteReady(false);
-          setSyncStatus("offline");
-        },
-      );
-    });
-
-    return () => {
-      cancelled = true;
-      unsubscribe?.();
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!hydrated) return;
-
-    try {
-      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(shared));
-    } catch {
-      // Firebase persistence remains the primary source of truth.
-    }
-
-    const board = boardRef.current;
-    const currentKey = stateKey(shared);
-    if (!remoteReady || !board || currentKey === lastRemoteKey.current) return;
-
-    setSyncStatus("saving");
-    const timer = window.setTimeout(() => {
-      void setDoc(board, {
-        checked: shared.checked,
-        customTodos: shared.customTodos,
-        clientUpdatedAt: Date.now(),
-        updatedAt: serverTimestamp(),
-        version: 1,
-      }).catch(() => setSyncStatus("offline"));
-    }, 550);
-
-    return () => window.clearTimeout(timer);
-  }, [hydrated, remoteReady, shared]);
-
-  const toggleChecked = (id: string) => {
-    setShared((current) => ({
-      ...current,
-      checked: current.checked.includes(id)
-        ? current.checked.filter((item) => item !== id)
-        : [...current.checked, id],
-    }));
-  };
-
-  const activeDay = tripDays[selectedDay];
-  const activeEvents = activeDay.events.filter(
-    (event) => !event.mode || event.mode === dayThirteenMode,
+function FoodPick({ card }: { card: FoodCard }) {
+  const tel = card.phone?.replace(/[^\d+]/g, "");
+  return (
+    <article className="food-card">
+      <p className="food-rank">Pick {card.rank}</p>
+      <h3>{card.name}</h3>
+      <p className="food-blurb">{card.blurb}</p>
+      <p className="food-address">{card.address}</p>
+      {card.phone && tel ? (
+        <a className="tap-link" href={`tel:+1${tel.replace(/^1/, "")}`}>
+          <Phone aria-hidden="true" />
+          {card.phone}
+        </a>
+      ) : null}
+      <p className="hours-line">{card.hours}</p>
+      {card.hoursUnverified ? <Unverified reason="Call to confirm these hours, especially Thanksgiving." /> : null}
+      <h4>Named dishes</h4>
+      <ul className="dish-list">
+        {card.dishes.map((dish) => (
+          <li key={dish.name}>
+            <strong>{dish.name}</strong>
+            {dish.unverified ? <Unverified reason={dish.unverifiedReason} /> : null}
+            {dish.skip ? <span className="chip chip-skip">do not order as written</span> : null}
+            <p>{dish.detail}</p>
+            {dish.skipReason ? <p className="call-line">{dish.skipReason}</p> : null}
+          </li>
+        ))}
+      </ul>
+      <h4>Ask / call to confirm</h4>
+      <ul className="ask-list">
+        {card.ask.map((line) => (
+          <li key={line}>{line}</li>
+        ))}
+      </ul>
+      {card.notes?.length ? (
+        <ul className="note-list">
+          {card.notes.map((note) => (
+            <li key={note}>{note}</li>
+          ))}
+        </ul>
+      ) : null}
+      <Sources links={card.sources} />
+    </article>
   );
-  const activeAlmanac = dayAlmanacs.find((entry) => entry.dayId === activeDay.id);
-  const activeStop = activeAlmanac
-    ? stopAlmanacs.find((stop) => stop.id === activeAlmanac.stopId)
-    : undefined;
-  const activeForecast = activeAlmanac
-    ? forecasts[activeAlmanac.stopId]?.days.find((day) => day.date === activeAlmanac.date)
-    : undefined;
-  // NWS alerts describe right now, so they belong only on today's and
-  // tomorrow's cards during the trip—not on a card three weeks out.
-  const dayAlertsRelevant =
-    clock !== null &&
-    clock.dayIndex >= 0 &&
-    selectedDay >= clock.dayIndex &&
-    selectedDay - clock.dayIndex <= 1;
-  const activeAlerts =
-    dayAlertsRelevant && activeAlmanac ? (alerts[activeAlmanac.stopId]?.alerts ?? []) : [];
+}
 
-  const tripDateCoverage = stopAlmanacs.flatMap((stop) =>
-    (stopTripDates[stop.id] ?? []).map((date) =>
-      Boolean(forecasts[stop.id]?.days.some((day) => day.date === date)),
-    ),
+function DriveCard({ row }: { row: DriveRow }) {
+  return (
+    <article className="drive-card">
+      <h3>{row.place}</h3>
+      <dl>
+        <div>
+          <dt>Drive (OSRM, no traffic)</dt>
+          <dd>{row.drive}</dd>
+        </div>
+        <div>
+          <dt>Reservations / hours</dt>
+          <dd>
+            {row.reserve ? <span className="chip chip-reserve">reservation flag</span> : null}
+            {row.reservations}
+          </dd>
+        </div>
+      </dl>
+      {row.unverified ? <Unverified reason={row.unverifiedReason} /> : null}
+      <p>{row.notes}</p>
+      <Sources links={row.sources} />
+    </article>
   );
-  const coveredDates = tripDateCoverage.filter(Boolean).length;
-  const forecastCoverage =
-    coveredDates === 0 ? "none" : coveredDates === tripDateCoverage.length ? "all" : "partial";
+}
 
-  const alertRows = stopAlmanacs.flatMap((stop) =>
-    (alerts[stop.id]?.alerts ?? []).map((alert) => ({ stop, alert })),
-  );
-  const alertsCheckedAt = Object.values(alerts).reduce(
-    (latest, stop) => Math.max(latest, stop.fetchedAt),
-    0,
-  );
-  // Where the group is right now, from the same day table the schedule uses.
-  const currentStopId =
-    clock && clock.dayIndex >= 0 && clock.dayIndex < tripDays.length
-      ? (dayAlmanacs.find((entry) => entry.dayId === tripDays[clock.dayIndex].id)?.stopId ?? null)
-      : null;
-  const activeTips = dayTips[activeDay.id] ?? [];
-  // Calendar-style "now" affordance: on today's card, the first unchecked
-  // event is Up next. Other days stay neutral.
-  const upNextId =
-    clock && clock.dayIndex === selectedDay
-      ? (activeEvents.find((event) => !shared.checked.includes(event.id))?.id ?? null)
-      : null;
-  const dayDoneCount = activeEvents.filter((event) => shared.checked.includes(event.id)).length;
-  const upNextIndex = Math.max(
-    0,
-    activeEvents.findIndex((event) => event.id === upNextId),
-  );
-  // Latest-value ref so the deck-scroll effect can read it without re-running
-  // (and yanking the scroll) every time an event gets checked off. Defined
-  // before the scroll effect so it updates first on a day change.
-  useEffect(() => {
-    upNextIndexRef.current = upNextIndex;
-  });
-
-  // A fresh day (or a view switch) opens the card deck at the Up-next event
-  // on today's card ("here I am right now"), or the first event otherwise.
-  useEffect(() => {
-    const deck = deckRef.current;
-    if (!deck) return;
-    const card = deck.querySelector<HTMLElement>(".event-card");
-    const target = card ? upNextIndexRef.current * (card.offsetWidth + 14) : 0;
-    deck.scrollTo({ left: target });
-  }, [selectedDay, activeTab, dayThirteenMode]);
-  // Shared enrichment for both schedule views (list rows and swipe cards).
-  const enrichedEvents = activeEvents.map((event) => {
-    const place = event.placeId ? places.find((item) => item.id === event.placeId) : undefined;
-    const directions = place
-      ? placeDirectionsHref(place)
-      : event.mapQuery
-        ? directionsHref(event.mapQuery)
-        : undefined;
-    return {
-      event,
-      place,
-      directions,
-      locationName:
-        event.locationName ?? place?.name ?? (event.mapQuery ? event.title : undefined),
-      locationDetail: event.locationDetail ?? place?.city,
-      options: (event.alternatives ?? []).filter(
-        (option) => !option.route || activeDay.id !== "aug-15" || option.route === homeRoute,
-      ),
-      image: event.placeId ? placeImages[event.placeId] : undefined,
-    };
-  });
-
-  const normalizedQuery = query.trim().toLowerCase();
-  const filteredPlaces = places.filter((place) => {
-    if (kindFilter !== "all" && place.category !== kindFilter) return false;
-    if (areaFilter !== "all" && place.area !== areaFilter) return false;
-    if (dayFilter !== "all" && !place.dayIds.includes(dayFilter)) return false;
-    if (mustOnly && !place.mustDo) return false;
-    if (normalizedQuery) {
-      const haystack = [
-        place.name,
-        place.city,
-        place.area,
-        place.tag,
-        place.note,
-        place.planned,
-        ...(place.dishes ?? []),
-        ...(place.cuisine ?? []),
-        ...(place.dietary?.map((tag) => dietaryLabels[tag]) ?? []),
-        place.effort,
-        place.practicalTip,
-        ...(place.amenities ?? []),
-      ]
-        .join(" ")
-        .toLowerCase();
-      if (!haystack.includes(normalizedQuery)) return false;
-    }
-    return true;
-  });
-  const filtersActive =
-    kindFilter !== "all" ||
-    areaFilter !== "all" ||
-    dayFilter !== "all" ||
-    mustOnly ||
-    normalizedQuery !== "";
-
-  const clearFilters = () => {
-    setQuery("");
-    setKindFilter("all");
-    setAreaFilter("all");
-    setDayFilter("all");
-    setMustOnly(false);
-  };
-
-  const tripNights = tripDays.length - 1;
-  const fuelGallons = TRIP_MILES / Math.max(mpg, 1);
-  const fuelCost = fuelGallons * Math.max(gasPrice, 0);
-  const safeTravelers = Math.min(Math.max(travelers, 1), 9);
-  const lodgingCost = tripNights * Math.max(lodgingNight, 0);
-  const foodCost = tripDays.length * safeTravelers * Math.max(foodPerDay, 0);
-  const ticketsCost = Math.max(ticketsBudget, 0);
-  const budgetTotal = fuelCost + lodgingCost + foodCost + ticketsCost;
-  const budgetRows = [
-    {
-      label: "Fuel",
-      detail: `${fuelGallons.toFixed(0)} gal · ${TRIP_MILES.toLocaleString()} mi`,
-      amount: fuelCost,
-    },
-    { label: "Lodging", detail: `${tripNights} nights`, amount: lodgingCost },
-    { label: "Food", detail: `${tripDays.length} days × ${safeTravelers}`, amount: foodCost },
-    { label: "Tickets + entries", detail: "opera, pueblo, parks", amount: ticketsCost },
-  ];
-  const homeMeal = places.find(
-    (place) => place.id === (homeRoute === "abilene" ? "spicy-india" : "masala-curry"),
-  );
-
-  const tripStatus = !clock
-    ? "Aug 8–15, 2026"
-    : clock.dayIndex < 0
-      ? `${clock.daysUntil} ${clock.daysUntil === 1 ? "day" : "days"} to departure`
-      : clock.dayIndex < tripDays.length
-        ? `Day ${clock.dayIndex + 1} of ${tripDays.length}`
-        : "Trip complete";
-
-  const tabKeyHandler = (event: KeyboardEvent<HTMLDivElement>) => {
-    if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
-    event.preventDefault();
-    const currentIndex = tabs.findIndex((tab) => tab.id === activeTab);
-    const direction = event.key === "ArrowRight" ? 1 : -1;
-    const next = (currentIndex + direction + tabs.length) % tabs.length;
-    setActiveTab(tabs[next].id);
-  };
+function BanderaView({ data }: { data: BanderaContent }) {
+  const { meta, weather, diet, days, foodPicks, events, drives, alerts, callSheet } = data;
 
   return (
-    <div className="site">
-      <a className="skip-link" href="#main">
-        Skip to content
+    <div className="site trip-page">
+      <a className="skip-link" href="#itinerary">
+        Skip to itinerary
       </a>
 
       <header className="topbar">
         <div className="brand">
-          <strong>New Mexico road trip</strong>
-          <span>Aug 8–15, 2026</span>
+          <MapPinned aria-hidden="true" />
+          <strong>{meta.stayName}</strong>
+          <span>{meta.dates}</span>
         </div>
-        <SyncPill status={syncStatus} />
+        <span className="tz-pill">{meta.timezone}</span>
       </header>
 
-      <section className="overview" aria-label="Trip overview">
-        <div className="overview-main">
-          <h1>The plan, in one place</h1>
-          <p className="overview-route">
-            Home → Lubbock → Taos → Santa Fe → Albuquerque → Palo Duro Canyon → home
-          </p>
-        </div>
-        <dl className="overview-stats">
-          <div>
-            <dt>Driving</dt>
-            <dd>1,952 mi · 30h 11m</dd>
-          </div>
-          <div>
-            <dt>Nights</dt>
-            <dd>7 booked</dd>
-          </div>
-          <div>
-            <dt>Food</dt>
-            <dd>Vegetarian · Indian first</dd>
-          </div>
-          <div>
-            <dt>Status</dt>
-            <dd>{tripStatus}</dd>
-          </div>
-        </dl>
-      </section>
-
-      <nav className="tab-bar" aria-label="Trip sections">
-        <div className="tabs" role="tablist" onKeyDown={tabKeyHandler}>
-          {tabs.map((tab) => {
-            const Icon = tab.icon;
-            return (
-              <button
-                key={tab.id}
-                id={`tab-${tab.id}`}
-                type="button"
-                role="tab"
-                aria-selected={activeTab === tab.id}
-                aria-controls={`${tab.id}-panel`}
-                className={activeTab === tab.id ? "active" : ""}
-                onClick={() => setActiveTab(tab.id)}
-              >
-                <Icon aria-hidden="true" />
-                <span className="tab-label-long">{tab.label}</span>
-                <span className="tab-label-short">{tab.shortLabel}</span>
-              </button>
-            );
-          })}
-        </div>
+      <nav className="jump-nav" aria-label="Trip sections">
+        <a href="#weather">Weather</a>
+        <a href="#diet">Diet</a>
+        <a href="#itinerary">Days</a>
+        <a href="#food">Food</a>
+        <a href="#events">Events</a>
+        <a href="#drives">Drives</a>
+        <a href="#alerts">Alerts</a>
+        <a href="#sources">Sources</a>
       </nav>
 
-      <main id="main">
-        {(activeTab === "cards" || activeTab === "plan") && (
-          <section
-            className="panel"
-            id={`${activeTab}-panel`}
-            role="tabpanel"
-            aria-labelledby={`tab-${activeTab}`}
-          >
-            <div className="panel-head">
-              <h2>{activeTab === "cards" ? "Swipe the day" : "Day by day"}</h2>
-              <p>
-                {activeTab === "cards"
-                  ? "One card per stop—swipe through the day, tap a photo for the full-screen deck. The Schedule tab shows the same day as a list."
-                  : "Dates, destinations, mileage, and drive times are fixed. Times marked “suggested” are flexible."}
-              </p>
-            </div>
+      <main>
+        <section className="hero" aria-labelledby="trip-title">
+          <p className="hero-kicker">Hill Country · Thanksgiving weekend</p>
+          <h1 id="trip-title">{meta.title}</h1>
+          <p className="hero-dates">{meta.dates}</p>
+          <p className="hero-place">
+            <span>{meta.stayAddress}</span>
+            <a className="tap-link" href={meta.stayPhoneTel}>
+              <Phone aria-hidden="true" />
+              {meta.stayPhone}
+            </a>
+          </p>
+          <p className="as-of">
+            Hours and weather as of {meta.researchedAsOf}. {meta.timezoneNote} Re-check before travel.
+          </p>
+          <p className="hero-drive">{data.driveIn.osrm}</p>
+          <a className="btn-link" href={data.driveIn.sources[0].href} target="_blank" rel="noopener noreferrer">
+            Live Google Maps route
+          </a>
+          <Sources links={data.driveIn.sources} />
+        </section>
 
-            <div className="day-picker" aria-label="Choose trip day" ref={dayPickerRef}>
-              {tripDays.map((day, index) => {
-                const isToday = clock?.dayIndex === index;
-                return (
-                  <button
-                    type="button"
-                    key={day.id}
-                    className={`${selectedDay === index ? "active" : ""}${isToday ? " is-today" : ""}`}
-                    onClick={() => setSelectedDay(index)}
-                    aria-current={selectedDay === index ? "date" : undefined}
-                    aria-label={`${day.weekday} August ${Number(day.shortDate)} · ${day.stop}${isToday ? " · today" : ""}`}
-                  >
-                    <small>{isToday ? "Today" : day.weekday.slice(0, 3)}</small>
-                    <strong>{day.shortDate}</strong>
-                    <span>{day.stop}</span>
-                  </button>
-                );
-              })}
-            </div>
+        <section id="weather" className="weather-strip" aria-labelledby="weather-title">
+          <div className="section-head">
+            <CloudSun aria-hidden="true" />
+            <h2 id="weather-title">NWS weather strip</h2>
+          </div>
+          <p className="nws-stamp">
+            {weather.pointLabel}. Last update {weather.updated}. {weather.valid}. {weather.zoneIssued}.
+          </p>
+          <div className="weather-days">
+            {weather.days.map((day) => (
+              <article key={day.id} className="weather-day">
+                <p className="weather-label">{day.label}</p>
+                <p className="weather-name">{day.name}</p>
+                <p className="weather-sky">{day.sky}</p>
+                <p className="weather-temps">
+                  {day.high}
+                  {day.low ? <span> / {day.low}</span> : <span className="muted"> night not fully listed</span>}
+                </p>
+                <p>{day.detail}</p>
+                <p className="muted">Zone: {day.zone}</p>
+              </article>
+            ))}
+          </div>
+          <p>
+            <Snowflake aria-hidden="true" className="inline-icon" />
+            {weather.freezeWarning}
+          </p>
+          <p>{weather.takeaway}</p>
+          <Sources links={weather.sources} />
+        </section>
 
-            <article className="day-card">
-              <div className="day-intro">
-                <div>
-                  <h3>{activeDay.title}</h3>
-                  <p>
-                    {activeDay.weekday}, {activeDay.date}
-                  </p>
-                </div>
-                <div className="day-route-actions">
-                  <div className="route-chip">
-                    <span>{activeDay.from}</span>
-                    <ChevronRight aria-hidden="true" />
-                    <strong>{activeDay.to}</strong>
-                  </div>
-                  {activeDay.route && (
-                    <a
-                      className="route-action"
-                      href={routeHref(activeDay.route)}
-                      target="_blank"
-                      rel="noreferrer"
-                    >
-                      <Navigation aria-hidden="true" /> {activeDay.route.label}
-                    </a>
-                  )}
-                </div>
-              </div>
+        <section id="diet" className="diet-callout" aria-labelledby="diet-title">
+          <div className="section-head">
+            <Leaf aria-hidden="true" />
+            <h2 id="diet-title">{diet.title}</h2>
+          </div>
+          <p>{diet.summary}</p>
+          <p>{diet.coconut}</p>
+          {diet.coconutUnverified ? <Unverified reason={diet.coconutUnverifiedReason} /> : null}
+          <Sources links={diet.sources} />
+        </section>
 
-              <div className="day-facts">
-                <div>
-                  <Route aria-hidden="true" />
-                  <span>
-                    <small>Distance</small>
-                    <strong>{activeDay.miles}</strong>
-                  </span>
-                </div>
-                <div>
-                  <Gauge aria-hidden="true" />
-                  <span>
-                    <small>Driving</small>
-                    <strong>{activeDay.wheelTime}</strong>
-                  </span>
-                </div>
-                <div>
-                  <Clock3 aria-hidden="true" />
-                  <span>
-                    <small>With stops</small>
-                    <strong>{activeDay.realTime}</strong>
-                  </span>
-                </div>
-                <div>
-                  <BedDouble aria-hidden="true" />
-                  <span>
-                    <small>Tonight</small>
-                    <strong>{activeDay.lodging}</strong>
-                  </span>
-                </div>
-              </div>
-
-              <div className="day-summary">
-                <p>{activeDay.summary}</p>
+        <section className="call-sheet" aria-labelledby="call-title">
+          <h2 id="call-title">Call to confirm Thursday morning</h2>
+          <p>Prefer a phone call over guessed Thanksgiving openings.</p>
+          <div className="call-grid">
+            {callSheet.map((row) => (
+              <a key={row.tel} className="call-btn" href={row.tel}>
+                <Phone aria-hidden="true" />
                 <span>
-                  <Clock3 aria-hidden="true" /> {activeDay.timezone}
+                  <strong>{row.name}</strong>
+                  <small>{row.phone}</small>
+                  <small>{row.why}</small>
                 </span>
+              </a>
+            ))}
+          </div>
+        </section>
+
+        <section id="itinerary" className="itinerary" aria-labelledby="itinerary-title">
+          <div className="section-head">
+            <CalendarDays aria-hidden="true" />
+            <h2 id="itinerary-title">Day by day</h2>
+          </div>
+          <p>
+            Soft assumptions: drive about 4 hours 9 minutes without heavy traffic (allow 5 hours on Thanksgiving).
+            Check-in after 4:00 p.m. and checkout by 10:00 a.m. are OTA-based, confirm. Thursday restaurant openings
+            in Bandera are UNVERIFIED.
+          </p>
+          <div className="day-jump">
+            {days.map((day) => (
+              <a key={day.id} href={`#day-${day.id}`}>
+                {day.short}
+              </a>
+            ))}
+          </div>
+          {days.map((day) => (
+            <section key={day.id} id={`day-${day.id}`} className="day-block">
+              <header className="day-head">
+                <h3>{day.date}</h3>
+                <p>{day.title}</p>
+                <p className="day-wx">
+                  {day.weather.sky} · {day.weather.high}
+                  {day.weather.low ? ` / ${day.weather.low}` : ""}
+                </p>
+                <Chips chips={day.chips} />
+              </header>
+              {day.items.map((item) => (
+                <ItemCard key={`${day.id}-${item.time}-${item.title}`} item={item} />
+              ))}
+            </section>
+          ))}
+        </section>
+
+        <section id="food" className="food" aria-labelledby="food-title">
+          <div className="section-head">
+            <Utensils aria-hidden="true" />
+            <h2 id="food-title">Top 5 vegetarian food cards</h2>
+          </div>
+          <p>Named dishes come from the linked menus. Call to confirm Thanksgiving hours. Never assume a kitchen is open.</p>
+          <div className="food-grid">
+            {foodPicks.map((card) => (
+              <FoodPick key={card.name} card={card} />
+            ))}
+          </div>
+          <article className="food-card food-card-extra">
+            <h3>{data.otherFoodNotes.ost.name}</h3>
+            <Unverified reason={data.otherFoodNotes.ost.unverifiedReason} />
+            <p>{data.otherFoodNotes.ost.address}</p>
+            <p>{data.otherFoodNotes.ost.hours}</p>
+            <p>{data.otherFoodNotes.ost.detail}</p>
+            <Sources links={data.otherFoodNotes.ost.sources} />
+          </article>
+          <article className="food-card food-card-extra">
+            <h3>Weaker menu evidence (not confirmed picks)</h3>
+            <Unverified reason="Official current menus were not confirmed in this research pass." />
+            <ul className="ask-list">
+              {data.otherFoodNotes.weaker.map((line) => (
+                <li key={line}>{line}</li>
+              ))}
+            </ul>
+          </article>
+          <article className="food-card food-card-extra">
+            <h3>Community Thanksgiving meals</h3>
+            <Unverified reason={data.otherFoodNotes.communityMeals.unverifiedReason} />
+            <p>{data.otherFoodNotes.communityMeals.detail}</p>
+            <Sources links={data.otherFoodNotes.communityMeals.sources} />
+          </article>
+        </section>
+
+        <section id="events" className="events" aria-labelledby="events-title">
+          <h2 id="events-title">Events, Nov 26-29 only</h2>
+          <p>Cowboy Christmas Parade (Dec 11-12) is after this trip and is not listed as a this-weekend event.</p>
+          <div className="event-list">
+            {events.map((event) => (
+              <article key={event.id} className="event-card">
+                <p className="event-when">{event.when}</p>
+                <h3>{event.title}</h3>
+                <p className="event-where">{event.where}</p>
+                {event.unverified ? <Unverified reason={event.unverifiedReason} /> : null}
+                <p>{event.detail}</p>
+                <Sources links={event.sources} />
+              </article>
+            ))}
+          </div>
+          <aside className="after-trip">
+            <h3>{data.afterThisTrip.title}</h3>
+            {data.afterThisTrip.items.map((item) => (
+              <div key={item.text}>
+                <p>{item.text}</p>
+                <Sources links={item.sources} />
               </div>
+            ))}
+          </aside>
+        </section>
 
-              {activeAlmanac && (
-                <div className="day-conditions" aria-label="Sun and weather for this day">
-                  <span>
-                    <Sunrise aria-hidden="true" /> {activeAlmanac.sunrise}
-                  </span>
-                  {activeAlmanac.sunset && (
-                    <span>
-                      <Sunset aria-hidden="true" /> {activeAlmanac.sunset}
-                    </span>
-                  )}
-                  {activeStop && !activeAlmanac.enRoute && (
-                    <span>
-                      <Thermometer aria-hidden="true" /> {activeStop.augHighF}° /{" "}
-                      {activeStop.augLowF}° typical
-                    </span>
-                  )}
-                  {activeAlmanac.stormWindow && (
-                    <span className="cond-storm">
-                      <CloudLightning aria-hidden="true" /> {activeAlmanac.stormWindow}
-                    </span>
-                  )}
-                  {activeForecast && (
-                    <span className="cond-live">
-                      <CloudSun aria-hidden="true" /> Forecast:{" "}
-                      {activeForecast.weatherCode !== null
-                        ? `${describeWeatherCode(activeForecast.weatherCode).label.toLowerCase()} · `
-                        : ""}
-                      {activeForecast.highF}°/{activeForecast.lowF}°
-                      {activeForecast.precipChance !== null
-                        ? ` · ${activeForecast.precipChance}% rain`
-                        : ""}
-                    </span>
-                  )}
-                  {activeAlerts.map((alert) => (
-                    <span className="cond-alert" key={alert.id}>
-                      <ShieldAlert aria-hidden="true" /> NWS: {alert.event}
-                    </span>
-                  ))}
-                </div>
-              )}
+        <section id="drives" className="drives" aria-labelledby="drives-title">
+          <div className="section-head">
+            <CarFront aria-hidden="true" />
+            <h2 id="drives-title">Drives from Flying L (OSRM, no traffic)</h2>
+          </div>
+          <p>{data.tpwdNote}</p>
+          <p>
+            Drive times computed Nov 23, 2026, from the official Flying L address. Use Google Maps for live times and
+            Thanksgiving traffic.
+          </p>
+          <Sources links={data.driveIn.sources} />
+          <div className="drive-grid">
+            {drives.map((row) => (
+              <DriveCard key={row.place} row={row} />
+            ))}
+          </div>
+        </section>
 
-              <div className="day-progress" aria-label="Progress through this day">
-                <div className="day-progress-track">
-                  {activeEvents.map((event) => (
-                    <i
-                      key={event.id}
-                      className={shared.checked.includes(event.id) ? "filled" : ""}
-                    />
-                  ))}
-                </div>
-                <span>
-                  {dayDoneCount} of {activeEvents.length} done
-                </span>
-              </div>
-
-              {activeDay.advisory && (
-                <div className="advisory">
-                  <ShieldAlert aria-hidden="true" />
-                  <div>
-                    <strong>Heads up</strong>
-                    <p>{activeDay.advisory}</p>
-                  </div>
-                </div>
-              )}
-
-              {activeTips.length > 0 && (
-                <aside className="day-tips" aria-label={`Know before you go for ${activeDay.title}`}>
-                  <div className="day-tips-heading">
-                    <Compass aria-hidden="true" />
-                    <span>Know before you go</span>
-                  </div>
-                  <div className="day-tips-grid">
-                    {activeTips.map((tip) => (
-                      <p key={tip.title}>
-                        <strong>{tip.title}</strong>
-                        {tip.detail}
-                      </p>
-                    ))}
-                  </div>
-                </aside>
-              )}
-
-              {activeDay.id === "aug-13" && (
-                <div className="mode-switch" aria-label="Choose the August 13 version">
-                  <div>
-                    <strong>August 13 has two versions</strong>
-                    <span>Slow morning is the default after the late opera night.</span>
-                  </div>
-                  <div>
-                    <button
-                      type="button"
-                      className={dayThirteenMode === "relaxed" ? "active" : ""}
-                      onClick={() => setDayThirteenMode("relaxed")}
-                    >
-                      Slow morning
-                    </button>
-                    <button
-                      type="button"
-                      className={dayThirteenMode === "falls" ? "active" : ""}
-                      onClick={() => setDayThirteenMode("falls")}
-                    >
-                      Nambé Falls early start
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {activeDay.id === "aug-15" && (
-                <div className="mode-switch" aria-label="Choose the August 15 home route">
-                  <div>
-                    <strong>August 15 needs a route choice</strong>
-                    <span>
-                      Google prefers US-287 → DFW → I-45 via Wichita Falls (~35 mi shorter,
-                      verified Aug 2026); the Abilene corridor repeats the outbound roads. The
-                      named stops follow whichever you pick.
-                    </span>
-                  </div>
-                  <div>
-                    <button
-                      type="button"
-                      className={homeRoute === "abilene" ? "active" : ""}
-                      onClick={() => setHomeRoute("abilene")}
-                    >
-                      Via Abilene
-                    </button>
-                    <button
-                      type="button"
-                      className={homeRoute === "wichita" ? "active" : ""}
-                      onClick={() => setHomeRoute("wichita")}
-                    >
-                      Via Wichita Falls
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {activeTab === "cards" ? (
-                <div className="event-deck-wrap">
-                  <div
-                    className="event-deck"
-                    ref={deckRef}
-                    aria-label={`Swipe through the ${enrichedEvents.length} stops on ${activeDay.title}`}
-                  >
-                    {enrichedEvents.map(
-                      ({ event, directions, locationName, locationDetail, options, image }, index) => {
-                        const isChecked = shared.checked.includes(event.id);
-                        return (
-                          <article
-                            className={`event-card ${isChecked ? "completed" : ""}${event.id === upNextId ? " is-next" : ""}`}
-                            key={event.id}
-                          >
-                            <div
-                              className={`event-card-media kind-${event.kind}`}
-                              role="button"
-                              tabIndex={0}
-                              aria-label={`Open ${event.title} in the full-screen swipe deck`}
-                              onClick={(clickEvent) => {
-                                if ((clickEvent.target as HTMLElement).closest("button, a")) return;
-                                setFocusOpen(true);
-                              }}
-                              onKeyDown={(keyEvent) => {
-                                if (keyEvent.key === "Enter" || keyEvent.key === " ") {
-                                  keyEvent.preventDefault();
-                                  setFocusOpen(true);
-                                }
-                              }}
-                            >
-                              {image ? (
-                                // eslint-disable-next-line @next/next/no-img-element -- static export uses relative public/ paths; next/image adds nothing here
-                                <img src={image.src} alt={image.alt} loading="lazy" />
-                              ) : (
-                                <EventIcon kind={event.kind} />
-                              )}
-                              <span className="event-card-step">
-                                {index + 1} / {enrichedEvents.length}
-                              </span>
-                              {event.id === upNextId && (
-                                <span className="next-chip">Up next</span>
-                              )}
-                              {image && <span className="event-card-credit">{image.credit}</span>}
-                              <CheckButton
-                                id={event.id}
-                                checked={isChecked}
-                                onToggle={toggleChecked}
-                                label={event.title}
-                              />
-                            </div>
-                            <div className="event-card-body">
-                              <div className="timeline-title-row">
-                                <span className="timeline-time">{event.time}</span>
-                                {event.duration && (
-                                  <span className="timeline-duration">{event.duration}</span>
-                                )}
-                              </div>
-                              <h4>{event.title}</h4>
-                              <p>{event.detail}</p>
-                              {directions && locationName && (
-                                <a
-                                  className="timeline-location"
-                                  href={directions}
-                                  target="_blank"
-                                  rel="noreferrer"
-                                >
-                                  <MapPinned aria-hidden="true" />
-                                  <span>
-                                    <strong>{locationName}</strong>
-                                    {locationDetail && <small>{locationDetail}</small>}
-                                  </span>
-                                  <Navigation aria-hidden="true" />
-                                </a>
-                              )}
-                              {(event.note || event.href) && (
-                                <div className="timeline-meta">
-                                  {event.note && <em>{event.note}</em>}
-                                  {event.href && (
-                                    <a href={event.href} target="_blank" rel="noreferrer">
-                                      {event.linkLabel ?? "Source"}{" "}
-                                      <ExternalLink aria-hidden="true" />
-                                    </a>
-                                  )}
-                                </div>
-                              )}
-                              {options.length > 0 && (
-                                <div className="option-swiper-block">
-                                  <strong>{event.optionsLabel ?? "Named alternatives"}</strong>
-                                  <div
-                                    className="option-swiper"
-                                    aria-label={`Swipe through options for ${event.title}`}
-                                  >
-                                    {options.map((option) => (
-                                      <div className="option-card" key={`${event.id}-${option.name}`}>
-                                        <a
-                                          className="option-card-main"
-                                          href={directionsHref(option.mapQuery)}
-                                          target="_blank"
-                                          rel="noreferrer"
-                                        >
-                                          <b>{option.name}</b>
-                                          <small>{option.detail}</small>
-                                        </a>
-                                        {option.href && (
-                                          <a
-                                            className="option-card-source"
-                                            href={option.href}
-                                            target="_blank"
-                                            rel="noreferrer"
-                                          >
-                                            {option.linkLabel ?? "Info"}{" "}
-                                            <ExternalLink aria-hidden="true" />
-                                          </a>
-                                        )}
-                                      </div>
-                                    ))}
-                                  </div>
-                                </div>
-                              )}
-                            </div>
-                          </article>
-                        );
-                      },
-                    )}
-                  </div>
-                  <div className="deck-controls">
-                    <button
-                      type="button"
-                      onClick={() => nudgeDeck(-1)}
-                      aria-label="Previous event card"
-                    >
-                      <ChevronLeft aria-hidden="true" />
-                    </button>
-                    <button
-                      type="button"
-                      className="focus-launch"
-                      onClick={() => setFocusOpen(true)}
-                    >
-                      <Maximize2 aria-hidden="true" /> Full-screen swipe mode ·{" "}
-                      {enrichedEvents.length} stops
-                    </button>
-                    <button type="button" onClick={() => nudgeDeck(1)} aria-label="Next event card">
-                      <ChevronRight aria-hidden="true" />
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <div className="timeline">
-                  {enrichedEvents.map(
-                    ({ event, directions, locationName, locationDetail, options }) => {
-                      const isChecked = shared.checked.includes(event.id);
-                      return (
-                        <div
-                          className={`timeline-row ${isChecked ? "completed" : ""}${event.id === upNextId ? " is-next" : ""}`}
-                          key={event.id}
-                        >
-                          <div className={`timeline-icon kind-${event.kind}`}>
-                            <EventIcon kind={event.kind} />
-                          </div>
-                          <div className="timeline-content">
-                            <div className="timeline-title-row">
-                              <span className="timeline-time">{event.time}</span>
-                              {event.duration && (
-                                <span className="timeline-duration">{event.duration}</span>
-                              )}
-                              {event.id === upNextId && <span className="next-pill">Up next</span>}
-                            </div>
-                            <h4>{event.title}</h4>
-                            <p>{event.detail}</p>
-                            {directions && locationName && (
-                              <a
-                                className="timeline-location"
-                                href={directions}
-                                target="_blank"
-                                rel="noreferrer"
-                              >
-                                <MapPinned aria-hidden="true" />
-                                <span>
-                                  <strong>{locationName}</strong>
-                                  {locationDetail && <small>{locationDetail}</small>}
-                                </span>
-                                <Navigation aria-hidden="true" />
-                              </a>
-                            )}
-                            {(event.note || event.href || directions) && (
-                              <div className="timeline-meta">
-                                {event.note && <em>{event.note}</em>}
-                                {directions && (
-                                  <a href={directions} target="_blank" rel="noreferrer">
-                                    Directions <Navigation aria-hidden="true" />
-                                  </a>
-                                )}
-                                {event.href && (
-                                  <a href={event.href} target="_blank" rel="noreferrer">
-                                    {event.linkLabel ?? "Source"} <ExternalLink aria-hidden="true" />
-                                  </a>
-                                )}
-                              </div>
-                            )}
-                            {options.length > 0 && (
-                              <aside
-                                className="timeline-options"
-                                aria-label={`Options for ${event.title}`}
-                              >
-                                <strong>{event.optionsLabel ?? "Named alternatives"}</strong>
-                                <div>
-                                  {options.map((option) => (
-                                    <div
-                                      className="timeline-option"
-                                      key={`${event.id}-${option.name}`}
-                                    >
-                                      <a
-                                        href={directionsHref(option.mapQuery)}
-                                        target="_blank"
-                                        rel="noreferrer"
-                                      >
-                                        <span>
-                                          <b>{option.name}</b>
-                                          <small>{option.detail}</small>
-                                        </span>
-                                        <Navigation aria-hidden="true" />
-                                      </a>
-                                      {option.href && (
-                                        <a
-                                          className="timeline-option-source"
-                                          href={option.href}
-                                          target="_blank"
-                                          rel="noreferrer"
-                                        >
-                                          {option.linkLabel ?? "Info"}{" "}
-                                          <ExternalLink aria-hidden="true" />
-                                        </a>
-                                      )}
-                                    </div>
-                                  ))}
-                                </div>
-                              </aside>
-                            )}
-                          </div>
-                          <CheckButton
-                            id={event.id}
-                            checked={isChecked}
-                            onToggle={toggleChecked}
-                            label={event.title}
-                          />
-                        </div>
-                      );
-                    },
-                  )}
-                </div>
-              )}
+        <section id="alerts" className="alerts" aria-labelledby="alerts-title">
+          <div className="section-head">
+            <AlertTriangle aria-hidden="true" />
+            <h2 id="alerts-title">Local alerts</h2>
+          </div>
+          {alerts.map((alert) => (
+            <article key={alert.id} className={`alert-card tone-${alert.tone}`}>
+              <h3>{alert.title}</h3>
+              {alert.unverified ? <Unverified reason={alert.unverifiedReason} /> : null}
+              <p>{alert.body}</p>
+              <Sources links={alert.sources} />
             </article>
-          </section>
-        )}
+          ))}
+        </section>
 
-        {activeTab === "explore" && (
-          <section
-            className="panel"
-            id="explore-panel"
-            role="tabpanel"
-            aria-labelledby="tab-explore"
-          >
-            <div className="panel-head">
-              <h2>Food & attractions</h2>
-              <p>
-                More than a directory: find the main plan, weather-safe alternatives, vegetarian
-                backups, map directions, official links, and practical reminders. Ask about ghee
-                when avoiding dairy; confirm beans, rice, and chile are lard-free.
-              </p>
-            </div>
+        <section className="resort-notes" aria-labelledby="resort-title">
+          <h2 id="resort-title">Flying L notes</h2>
+          <p>{data.resort.hours}</p>
+          <p>{data.resort.checkIn.summary}</p>
+          <Unverified reason={data.resort.checkIn.unverifiedReason} />
+          <Sources links={data.resort.checkIn.sources} />
+          <p>
+            {data.resort.pool.summary} {data.resort.pool.note}
+          </p>
+          <Sources links={data.resort.pool.sources} />
+          <p>{data.resort.activities.summary}</p>
+          <Unverified reason={data.resort.activities.unverifiedReason} />
+          <Sources links={data.resort.activities.sources} />
+          <p>{data.resort.dining.summary}</p>
+          <Unverified reason={data.resort.dining.unverifiedReason} />
+          <Sources links={data.resort.dining.sources} />
+          <p>{data.resort.otaAddressNote}</p>
+        </section>
 
-            <div className="explore-controls">
-              <label className="search-box">
-                <Search aria-hidden="true" />
-                <input
-                  type="search"
-                  value={query}
-                  onChange={(event) => setQuery(event.target.value)}
-                  placeholder="Search names, dishes, cities…"
-                  aria-label="Search food and attractions"
-                />
-              </label>
-
-              <div className="segmented" role="group" aria-label="Filter by type">
-                {(
-                  [
-                    { id: "all", label: "Everything" },
-                    { id: "attraction", label: "Attractions" },
-                    { id: "food", label: "Food" },
-                  ] as { id: PlaceCategory | "all"; label: string }[]
-                ).map((option) => (
-                  <button
-                    key={option.id}
-                    type="button"
-                    className={kindFilter === option.id ? "active" : ""}
-                    aria-pressed={kindFilter === option.id}
-                    onClick={() => setKindFilter(option.id)}
-                  >
-                    {option.label}
-                  </button>
-                ))}
-              </div>
-
-              <label className="day-select">
-                <span>Day</span>
-                <select value={dayFilter} onChange={(event) => setDayFilter(event.target.value)}>
-                  <option value="all">Any day</option>
-                  {tripDays.map((day) => (
-                    <option key={day.id} value={day.id}>
-                      {day.weekday.slice(0, 3)} Aug {Number(day.shortDate)} · {day.stop}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              <button
-                type="button"
-                className={`must-toggle ${mustOnly ? "active" : ""}`}
-                aria-pressed={mustOnly}
-                onClick={() => setMustOnly((value) => !value)}
-              >
-                <Sparkles aria-hidden="true" /> Don’t-miss
-              </button>
-            </div>
-
-            <div className="chip-row" role="group" aria-label="Filter by place">
-              <button
-                type="button"
-                className={areaFilter === "all" ? "active" : ""}
-                aria-pressed={areaFilter === "all"}
-                onClick={() => setAreaFilter("all")}
-              >
-                All places
-              </button>
-              {areas.map((area) => (
-                <button
-                  key={area}
-                  type="button"
-                  className={areaFilter === area ? "active" : ""}
-                  aria-pressed={areaFilter === area}
-                  onClick={() => setAreaFilter(area)}
-                >
-                  {area}
-                </button>
-              ))}
-            </div>
-
-            <div className="result-row">
-              <p aria-live="polite">
-                {filteredPlaces.length === places.length
-                  ? `${places.length} places`
-                  : `${filteredPlaces.length} of ${places.length} places`}
-              </p>
-              {filtersActive && (
-                <button type="button" className="clear-filters" onClick={clearFilters}>
-                  Clear filters
-                </button>
-              )}
-            </div>
-
-            {filteredPlaces.length > 0 ? (
-              <div className="place-grid">
-                {filteredPlaces.map((place) => (
-                  <PlaceCard key={place.id} place={place} />
-                ))}
-              </div>
-            ) : (
-              <div className="empty-results">
-                <p>Nothing matches those filters.</p>
-                <button type="button" className="clear-filters" onClick={clearFilters}>
-                  Clear filters
-                </button>
-              </div>
-            )}
-          </section>
-        )}
-
-        {activeTab === "weather" && (
-          <section
-            className="panel"
-            id="weather-panel"
-            role="tabpanel"
-            aria-labelledby="tab-weather"
-          >
-            <div className="panel-head">
-              <h2>Weather & sky</h2>
-              <p>
-                Aug 8–15 sits in the peak weeks of the North American Monsoon: sunny, calm
-                mornings almost every day, storms building over the mountains after lunch.
-                The typical numbers below are NOAA 1991–2020 normals for these exact dates.
-              </p>
-            </div>
-
-            <div className="forecast-note">
-              <CloudSun aria-hidden="true" />
-              <span>
-                {forecastCoverage === "all"
-                  ? "All trip dates are inside the live 16-day window—forecast tiles below refresh on every visit and stay cached for offline mornings."
-                  : forecastCoverage === "partial"
-                    ? "Live forecasts are filling in day by day as trip dates enter the 16-day window—tiles still marked “normals” aren't in range yet."
-                    : forecastWindowNote}
-              </span>
-            </div>
-
-            {alertRows.length > 0 ? (
-              <div className="alerts-strip" role="status">
-                {alertRows.map(({ stop, alert }) => (
-                  <a
-                    className="alert-row"
-                    key={`${stop.id}-${alert.id}`}
-                    href={stop.nwsUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    <ShieldAlert aria-hidden="true" />
-                    <span>
-                      <strong>
-                        {stop.name}: {alert.event}
-                      </strong>
-                      {alert.headline && <small>{alert.headline}</small>}
-                    </span>
-                    <ExternalLink aria-hidden="true" />
-                  </a>
-                ))}
-              </div>
-            ) : (
-              alertsCheckedAt > 0 && (
-                <p className="alerts-clear">
-                  <CheckCircle2 aria-hidden="true" />{" "}
-                  {(clock?.now ?? alertsCheckedAt) - alertsCheckedAt < 90 * 60 * 1000
-                    ? `No active NWS watches or warnings at any stop as of ${new Date(alertsCheckedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}.`
-                    : "Couldn't refresh NWS alerts—use the NWS forecast links on each stop for current watches and warnings."}
-                </p>
-              )
-            )}
-
-            <div className="stop-weather-grid">
-              {stopAlmanacs.map((stop) => (
-                <article className="stop-weather-card" key={stop.id}>
-                  <div className="stop-weather-head">
-                    <div>
-                      <h3>{stop.name}</h3>
-                      <small>
-                        {stop.nights} · {stop.elevationFt.toLocaleString()} ft
-                      </small>
-                    </div>
-                    <a className="card-link" href={stop.nwsUrl} target="_blank" rel="noreferrer">
-                      NWS forecast <ExternalLink aria-hidden="true" />
-                    </a>
-                  </div>
-                  <div className="normals-row">
-                    <span className="normal-chip">
-                      <Thermometer aria-hidden="true" /> August normal{" "}
-                      <strong>
-                        {stop.augHighF}° / {stop.augLowF}°
-                      </strong>
-                    </span>
-                    <span className="normal-chip">
-                      <CloudRain aria-hidden="true" />
-                      <strong>{stop.augPrecipIn}″</strong> · {stop.augRainDays} rain days
-                    </span>
-                  </div>
-                  <div className="forecast-days">
-                    {(stopTripDates[stop.id] ?? []).map((date) => {
-                      const forecast = forecasts[stop.id]?.days.find(
-                        (day) => day.date === date,
-                      );
-                      if (!forecast) {
-                        return (
-                          <div className="forecast-day pending" key={date}>
-                            <small>{tripDateLabel(date)}</small>
-                            <strong>
-                              {stop.augHighF}°<span>/{stop.augLowF}°</span>
-                            </strong>
-                            <em>normals</em>
-                          </div>
-                        );
-                      }
-                      const described =
-                        forecast.weatherCode !== null
-                          ? describeWeatherCode(forecast.weatherCode)
-                          : null;
-                      const Icon = forecastIcons[described?.group ?? "cloud"];
-                      return (
-                        <div className="forecast-day" key={date}>
-                          <small>{tripDateLabel(date)}</small>
-                          <Icon className={`fc-${described?.group ?? "cloud"}`} aria-hidden="true" />
-                          <strong>
-                            {forecast.highF}°<span>/{forecast.lowF}°</span>
-                          </strong>
-                          <em>
-                            {forecast.precipChance !== null && (
-                              <>
-                                <Droplets aria-hidden="true" /> {forecast.precipChance}%
-                              </>
-                            )}
-                            {forecast.precipChance !== null && described ? " · " : ""}
-                            {described?.label}
-                          </em>
-                        </div>
-                      );
-                    })}
-                  </div>
-                  <p className="stop-weather-note">{stop.climateNote}</p>
-                  <p className="stop-weather-note">{stop.stormNote}</p>
-                </article>
-              ))}
-            </div>
-
-            <div className="monsoon-card">
-              <h3>
-                <CloudLightning aria-hidden="true" /> The monsoon, in one minute
-              </h3>
-              <p>
-                August is the wettest month of the year in Taos (1.77″) and Santa Fe (1.96″),
-                but it arrives in bursts and breaks—some trip days will stay bone dry, others
-                fire widespread storms. The daily rhythm is reliable enough to plan around:
-              </p>
-              <div className="monsoon-rhythm">
-                <div>
-                  <strong>
-                    <Sun aria-hidden="true" /> Morning · clear
-                  </strong>
-                  <p>
-                    Sunny, calm, dry nearly every day. The window for the Gorge Bridge,
-                    Bandelier, and canyon trails—UV hits 10–12 at altitude, so sun protection
-                    from the start.
-                  </p>
-                </div>
-                <div>
-                  <strong>
-                    <Cloud aria-hidden="true" /> Midday · building
-                  </strong>
-                  <p>
-                    Cumulus stacks over the Sangre de Cristos, Jemez, and Sandias by 11 AM;
-                    first storms on the peaks noon–2 PM. Be off exposed rims and high points
-                    by about 1 PM.
-                  </p>
-                </div>
-                <div>
-                  <strong>
-                    <CloudLightning aria-hidden="true" /> Afternoon · storms
-                  </strong>
-                  <p>
-                    Cells drift over valleys 2–8 PM: brief heavy rain, gusty outflow, and a
-                    lot of lightning. Wait 30 minutes after the last thunder; most storms die
-                    out by late evening.
-                  </p>
-                </div>
-              </div>
-              <p className="small-note">
-                Flash floods run ahead of the rain: burn scars above Frijoles Canyon and slot
-                drainages can flood from storms miles upstream while the sky overhead stays
-                blue. Never cross moving water, at Palo Duro or anywhere else.
-              </p>
-            </div>
-
-            <div className="sky-grid">
-              <article className="tool-card">
-                <h3>
-                  <Sunrise aria-hidden="true" /> Sun, day by day
-                </h3>
-                <table className="sun-table">
-                  <thead>
-                    <tr>
-                      <th scope="col">Day</th>
-                      <th scope="col">Sunrise</th>
-                      <th scope="col">Sunset</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {dayAlmanacs.map((entry) => {
-                      const day = tripDays.find((tripDay) => tripDay.id === entry.dayId);
-                      if (!day) return null;
-                      const tonight = clock?.dayIndex === tripDays.indexOf(day);
-                      return (
-                        <tr key={entry.dayId} className={tonight ? "is-tonight" : undefined}>
-                          <td>
-                            {day.weekday.slice(0, 3)} {Number(day.shortDate)}{" "}
-                            <small>· {day.stop}</small>
-                          </td>
-                          <td>{entry.sunrise}</td>
-                          <td>{entry.sunset ?? "en route"}</td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-                <p className="small-note">
-                  Aug 9 and Aug 14 cross time zones, so those rows mix CDT and MDT on
-                  purpose—sunrise is where the day starts, sunset where it ends.
-                </p>
-              </article>
-
-              <article className="tool-card">
-                <h3>
-                  <MoonStar aria-hidden="true" /> Moon & meteors, night by night
-                </h3>
-                <div className="moon-list">
-                  {moonNights.map((night) => (
-                    <div className="moon-row" key={night.date}>
-                      <strong>{night.label}</strong>
-                      <span className="moon-phase">
-                        {night.phase} · {night.illumination}%
-                      </span>
-                      <span className="moon-note">{night.note}</span>
-                    </div>
-                  ))}
-                </div>
-                <div className="perseids-callout">
-                  <Sparkles aria-hidden="true" />
-                  <div>
-                    <strong>{perseids.title}</strong>
-                    <p>{perseids.detail}</p>
-                  </div>
-                </div>
-              </article>
-            </div>
-          </section>
-        )}
-
-        {activeTab === "info" && (
-          <section className="panel" id="info-panel" role="tabpanel" aria-labelledby="tab-info">
-            <div className="panel-head">
-              <h2>Trip info</h2>
-              <p>Route, clocks, fuel, and the safety rules that shape each day.</p>
-            </div>
-
-            <div className="route-board">
-              <div className="route-board-head">
-                <h3>1,952 miles · 30 hr 11 min driving</h3>
-                <a href={coreRouteHref} target="_blank" rel="noreferrer">
-                  <Navigation aria-hidden="true" /> Open core route
-                </a>
-              </div>
-              <RouteMap currentStopId={currentStopId} />
-              <ol className="route-list">
-                {routeStops.map((stop, index) => (
-                  <li key={`${stop.place}-${index}`}>
-                    <span className="route-node">{index + 1}</span>
-                    <div>
-                      <strong>{stop.place}</strong>
-                      <small>
-                        {stop.date} · {stop.stay}
-                      </small>
-                    </div>
-                  </li>
-                ))}
-              </ol>
-            </div>
-
-            <div className="info-grid">
-              <article className="tool-card">
-                <h3>
-                  <Clock3 aria-hidden="true" /> Two time-zone moves
-                </h3>
-                <div className="timezone-row">
-                  <Plus aria-hidden="true" />
-                  <div>
-                    <strong>Aug 9 · gain one hour</strong>
-                    <span>Lubbock CDT → Taos MDT</span>
-                  </div>
-                </div>
-                <div className="timezone-row">
-                  <Minus aria-hidden="true" />
-                  <div>
-                    <strong>Aug 14 · lose one hour</strong>
-                    <span>Albuquerque MDT → Palo Duro CDT</span>
-                  </div>
-                </div>
-                <p className="small-note">
-                  On Aug 14, 4 hr 25 min of driving advances the local clock by 5 hr 25 min
-                  before stops.
-                </p>
-              </article>
-
-              <article className="tool-card">
-                <h3>
-                  <Wallet aria-hidden="true" /> Trip budget sketch
-                </h3>
-                <p>
-                  Planning math, not bookkeeping—edit the numbers to match the group and the
-                  bars re-balance.
-                </p>
-                <div className="input-pair">
-                  <label>
-                    Vehicle MPG
-                    <input
-                      type="number"
-                      min="8"
-                      max="80"
-                      step="1"
-                      value={mpg}
-                      onChange={(event) => setMpg(Number(event.target.value))}
-                    />
-                  </label>
-                  <label>
-                    Gas $/gallon
-                    <input
-                      type="number"
-                      min="0"
-                      max="10"
-                      step="0.05"
-                      value={gasPrice}
-                      onChange={(event) => setGasPrice(Number(event.target.value))}
-                    />
-                  </label>
-                </div>
-                <div className="input-pair">
-                  <label>
-                    Travelers
-                    <input
-                      type="number"
-                      min="1"
-                      max="9"
-                      step="1"
-                      value={travelers}
-                      onChange={(event) => setTravelers(Number(event.target.value))}
-                    />
-                  </label>
-                  <label>
-                    Lodging $/night
-                    <input
-                      type="number"
-                      min="0"
-                      max="1000"
-                      step="10"
-                      value={lodgingNight}
-                      onChange={(event) => setLodgingNight(Number(event.target.value))}
-                    />
-                  </label>
-                </div>
-                <div className="input-pair">
-                  <label>
-                    Food $/person/day
-                    <input
-                      type="number"
-                      min="0"
-                      max="200"
-                      step="5"
-                      value={foodPerDay}
-                      onChange={(event) => setFoodPerDay(Number(event.target.value))}
-                    />
-                  </label>
-                  <label>
-                    Tickets + entries $
-                    <input
-                      type="number"
-                      min="0"
-                      max="3000"
-                      step="25"
-                      value={ticketsBudget}
-                      onChange={(event) => setTicketsBudget(Number(event.target.value))}
-                    />
-                  </label>
-                </div>
-                <div className="budget-rows">
-                  {budgetRows.map((row) => {
-                    const share = budgetTotal > 0 ? Math.max(2, (row.amount / budgetTotal) * 100) : 0;
-                    return (
-                      <div className="budget-row" key={row.label}>
-                        <div className="budget-row-head">
-                          <span>
-                            {row.label} <small>{row.detail}</small>
-                          </span>
-                          <strong>${Number.isFinite(row.amount) ? Math.round(row.amount) : 0}</strong>
-                        </div>
-                        <div className="budget-bar">
-                          <i style={{ width: `${share}%` }} />
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-                <div className="fuel-total">
-                  <span>Whole-trip estimate</span>
-                  <strong>${Number.isFinite(budgetTotal) ? Math.round(budgetTotal) : 0}</strong>
-                </div>
-                <p className="small-note">
-                  Opera seats, Taos Pueblo ($25 each), Bandelier ($25/vehicle), Palo Duro, and
-                  Nambé Falls ($20/vehicle) all land in the tickets line—see each card in Food
-                  &amp; attractions for current prices.
-                </p>
-              </article>
-
-              <article className="tool-card">
-                <h3>
-                  <Navigation aria-hidden="true" /> Aug 15 meal stop
-                </h3>
-                <p>
-                  Route check (Aug 2026): the Wichita Falls → DFW → I-45 corridor is Google&apos;s
-                  preferred pick and ~35 miles shorter; via Abilene repeats the outbound roads.
-                  Both stay planned—pick what matches the day.
-                </p>
-                <div className="segmented" role="group" aria-label="Choose the home route">
-                  <button
-                    type="button"
-                    className={homeRoute === "abilene" ? "active" : ""}
-                    aria-pressed={homeRoute === "abilene"}
-                    onClick={() => setHomeRoute("abilene")}
-                  >
-                    Via Abilene
-                  </button>
-                  <button
-                    type="button"
-                    className={homeRoute === "wichita" ? "active" : ""}
-                    aria-pressed={homeRoute === "wichita"}
-                    onClick={() => setHomeRoute("wichita")}
-                  >
-                    Via Wichita Falls
-                  </button>
-                </div>
-                {homeMeal && (
-                  <div className="route-meal">
-                    <strong>
-                      {homeMeal.name} · {homeMeal.city}
-                    </strong>
-                    <span>{homeMeal.dishes?.join(", ")}. {homeMeal.note}</span>
-                    {homeMeal.href && (
-                      <a href={homeMeal.href} target="_blank" rel="noreferrer">
-                        Official site <ExternalLink aria-hidden="true" />
-                      </a>
-                    )}
-                    <a href={placeDirectionsHref(homeMeal)} target="_blank" rel="noreferrer">
-                      Directions <Navigation aria-hidden="true" />
-                    </a>
-                  </div>
-                )}
-              </article>
-
-              <article className="tool-card">
-                <h3>
-                  <ShieldAlert aria-hidden="true" /> Heat, height, and storms
-                </h3>
-                <ul className="safety-list">
-                  <li>Morning slots for the gorge, Bandelier, falls, and canyon trails.</li>
-                  <li>Turn around at thunder; dry ground does not rule out upstream flash flooding.</li>
-                  <li>At altitude, headache + nausea + unusual fatigue means stop, and descend if it worsens.</li>
-                  <li>Palo Duro: about one quart of water per person per trail mile.</li>
-                  <li>No Lighthouse Trail after the drive or before the 617-mile day home.</li>
-                </ul>
-              </article>
-            </div>
-
-            <div className="live-tools">
-              <div className="live-tools-copy">
-                <h3>Open these on travel mornings</h3>
-                <p>
-                  Research is current as of August 2, 2026. These links are the final word when
-                  conditions change.
-                </p>
-              </div>
-              <div className="live-link-grid">
-                {liveLinks.map((link) => (
-                  <a href={link.href} target="_blank" rel="noreferrer" key={link.label}>
-                    <span>
-                      <strong>{link.label}</strong>
-                      <small>{link.detail}</small>
-                    </span>
-                    <ExternalLink aria-hidden="true" />
-                  </a>
-                ))}
-              </div>
-            </div>
-          </section>
-        )}
+        <footer id="sources" className="source-footer">
+          <h2>Sources</h2>
+          <p className="as-of">
+            Researched {meta.researchedAsOfLong}, {meta.timezone}. Hours and weather as of {meta.researchedAsOf}.
+            Forecasts and hours can change; re-check before travel. Prefer call to confirm over guessed openings.
+          </p>
+          <Sources links={data.sources} />
+        </footer>
       </main>
-
-      {focusOpen && (
-        <FocusDeck
-          day={activeDay}
-          events={enrichedEvents}
-          checkedIds={shared.checked}
-          onToggleChecked={toggleChecked}
-          onClose={() => setFocusOpen(false)}
-        />
-      )}
-
-      <footer>
-        <p>
-          <strong>New Mexico road trip · Aug 8–15, 2026.</strong> Research last checked August 2,
-          2026—reconfirm hours, closures, tickets, weather, and road conditions before each day.
-        </p>
-      </footer>
     </div>
   );
+}
+
+export default function TripPlanner() {
+  const [data, setData] = useState<BanderaContent | null>(null);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+    import("./bandera-content")
+      .then((mod) => {
+        if (!cancelled) setData(mod.content);
+      })
+      .catch(() => {
+        if (!cancelled) setError("Could not load the trip notes. Try refreshing this tab.");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  if (error) {
+    return (
+      <main className="trip-loading">
+        <p>{error}</p>
+      </main>
+    );
+  }
+
+  if (!data) {
+    return (
+      <main className="trip-loading" aria-busy="true">
+        <p>Loading trip notes…</p>
+      </main>
+    );
+  }
+
+  return <BanderaView data={data} />;
 }
