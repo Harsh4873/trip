@@ -6,6 +6,9 @@ const nextConfig: NextConfig = {
   turbopack: {
     root: process.cwd(),
   },
+  env: {
+    NEXT_PUBLIC_BASE_PATH: isGitHubPages ? "/trip" : "",
+  },
   ...(isGitHubPages
     ? {
         output: "export" as const,
