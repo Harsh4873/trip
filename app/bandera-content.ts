@@ -37,7 +37,6 @@ export type ItineraryItem = {
   time: string;
   title: string;
   body: string;
-  chips?: string[];
   unverified?: boolean;
   unverifiedReason?: string;
   callToConfirm?: string;
@@ -47,10 +46,10 @@ export type ItineraryItem = {
 export type DayPlan = {
   id: string;
   date: string;
+  weekday: string;
   short: string;
   title: string;
   weather: { high: string; low?: string; sky: string };
-  chips: string[];
   items: ItineraryItem[];
 };
 
@@ -107,12 +106,70 @@ export const S = {
     label: "Priceline listing (OTA, not official)",
   },
   mapsDrive: {
-    href: "https://www.google.com/maps/dir/College+Station,+TX/675+Flying+L+Dr,+Bandera,+TX+78003",
-    label: "Google Maps: College Station to Flying L",
+    href: "https://www.google.com/maps/dir/Katy,+TX/675+Flying+L+Dr,+Bandera,+TX+78003",
+    label: "Google Maps: Katy to Flying L",
+  },
+  mapsDriveBack: {
+    href: "https://www.google.com/maps/dir/675+Flying+L+Dr,+Bandera,+TX+78003/Katy,+TX",
+    label: "Google Maps: Flying L to Katy",
   },
   osrm: {
     href: "https://router.project-osrm.org/",
-    label: "OSRM routing (computed Nov 23, 2026)",
+    label: "OSRM routing (computed Nov 23, 2026, no traffic)",
+  },
+  osrmOut: {
+    href: "https://router.project-osrm.org/route/v1/driving/-95.8243956,29.7857853;-99.0481450,29.7126941?overview=false",
+    label: "OSRM Katy to Flying L (no traffic)",
+  },
+  osrmBack: {
+    href: "https://router.project-osrm.org/route/v1/driving/-99.0481450,29.7126941;-95.8243956,29.7857853?overview=false",
+    label: "OSRM Flying L to Katy (no traffic)",
+  },
+  papsMaps: {
+    href: "https://www.google.com/maps/search/?api=1&query=Pap%27s+Italian+Grill+632+TX-16+Bandera+TX+78003",
+    label: "Google Maps: Pap's Italian Grill",
+  },
+  papsMenuWeb: {
+    href: "http://menusweb.com/restaurants/paps-italian-grill-menu-bandera",
+    label: "Menusweb Pap's menu (third-party)",
+  },
+  papsSlice: {
+    href: "https://papsitaliangrillbandera.com/",
+    label: "Pap's Italian Grill order page",
+  },
+  papsCounty: {
+    href: "https://amlegdistrict21.us/news-events/20260320_DECBanderaEateries.pdf",
+    label: "Bandera County eateries list (June 2025 PDF)",
+  },
+  frontierTimes: {
+    href: "https://www.frontiertimesmuseum.org/",
+    label: "Frontier Times Museum",
+  },
+  frontierEvents: {
+    href: "https://www.frontiertimesmuseum.org/events",
+    label: "Frontier Times Museum events",
+  },
+  banderaNhm: {
+    href: "https://www.banderanhm.org/",
+    label: "Bandera Natural History and Art Museum",
+  },
+  loveCreek: { href: "https://lovecreekorchards.com/", label: "Love Creek Orchards" },
+  loveCreekHours: {
+    href: "https://lovecreekorchards.com/?page_id=1639",
+    label: "Love Creek hours / contact",
+  },
+  cibolo: {
+    href: "https://www.cibolo.org/cibolo-nature-center",
+    label: "Cibolo Nature Center (The Cibolo)",
+  },
+  buceesFaq: {
+    href: "https://buc-ees.com/about/frequently-asked-questions/",
+    label: "Buc-ee's FAQ (hours and kitchen)",
+  },
+  buceesLocations: { href: "https://buc-ees.com/locations/", label: "Buc-ee's locations" },
+  fox4heb: {
+    href: "https://www.fox4news.com/news/thanksgiving-day-store-hours-2026-which-dfw-grocery-stores-retailers-open",
+    label: "FOX 4: H-E-B Thanksgiving 2026 hours (Nov 19, 2026)",
   },
   nwsPoint: {
     href: "https://forecast.weather.gov/MapClick.php?lat=29.7269&lon=-99.0738",
@@ -266,7 +323,7 @@ export const meta = {
   stayAddress: "675 Flying L Dr, Bandera, TX 78003",
   stayPhone: "(830) 796-7745",
   stayPhoneTel: "tel:+18307967745",
-  originCity: "College Station, TX",
+  originCity: "Katy, TX",
 };
 
 export const resort = {
@@ -373,16 +430,22 @@ export const diet = {
 };
 
 export const driveIn = {
-  osrm: "OSRM estimate (no live traffic), Nov 23, 2026: about 4 hours 9 minutes, 208 miles (249 minutes, 208.2 miles) from College Station (University Drive point) to the Flying L area.",
+  blurb:
+    "Starts and ends in Katy, TX. I-10 west through San Antonio, then Loop 1604 and TX-16/173 to the ranch.",
+  osrmShort: "OSRM no-traffic: 3 hours 57 minutes, 218 miles outbound; 3 hours 56 minutes back.",
+  osrm:
+    "OSRM estimate (no live traffic), Nov 23, 2026: about 3 hours 57 minutes, 218 miles (237.1 minutes, 217.58 miles) from Katy, TX (city point 29.7857853, -95.8243956) to 675 Flying L Drive (29.7126941, -99.0481450).",
+  osrmBack:
+    "Return, same method: about 3 hours 56 minutes, 218 miles (235.6 minutes, 217.78 miles).",
   route:
-    "OSRM's chosen highway sequence (simplified): FM 60 / TX-47 / TX-21 and TX-71, then TX-80 / TX-142 to I-35 south, Loop 1604 West, FM 1560 / TX-16, TX-173, then Wharton's Dock Road to Flying L Drive.",
+    "OSRM's chosen highway sequence (simplified): I-10 west (Katy Freeway) through the San Antonio side, Loop 1604 West (Anderson Loop), FM 1560 / TX-16 Bandera Road, TX-173, then Wharton's Dock Road to Flying L Drive.",
   traffic:
-    "Planning estimate only. Thanksgiving traffic, especially around I-35 and the San Antonio loops, can add time.",
+    "Planning estimate only. Thanksgiving traffic, especially on I-10 and the San Antonio loops, can add time. Use the live Google Maps links.",
   wharton:
     "The route uses Wharton's Dock Road, where Bandera County recently lowered the speed limit from 45 mph to 35 mph for 1.4 miles southbound from Hwy 173 S.",
   grocery:
-    "Bandera's in-town supermarket (Lowe's Market) is closed Thanksgiving. If groceries are needed Thursday, shop in College Station before leaving, or stop at an H-E-B on the route while stores are still open (chain-wide Thanksgiving hours are reported as 6 a.m.-noon; confirm the specific store).",
-  sources: [S.mapsDrive, S.osrm, S.prophetNews, S.lowes, S.khou, S.heb],
+    "Bandera's in-town supermarket (Lowe's Market) is closed Thanksgiving. Shop at an H-E-B in Katy before noon on Thursday. Chain-wide Thanksgiving hours are reported as 6 a.m. to noon; UNVERIFIED for the specific Katy store. Do not count on a Bandera kitchen until someone confirms it is open.",
+  sources: [S.mapsDrive, S.mapsDriveBack, S.osrm, S.osrmOut, S.osrmBack, S.prophetNews, S.lowes, S.khou, S.fox4heb, S.heb],
 };
 
 export const foodPicks: FoodCard[] = [
@@ -434,6 +497,72 @@ export const foodPicks: FoodCard[] = [
   },
   {
     rank: 2,
+    name: "Pap's Italian Grill",
+    blurb:
+      "The owner's old Italian / pizza place in Bandera. Inexpensive sit-down pasta and pizza. Suggested dinner Friday or Saturday, not Thursday unless they confirm they are open.",
+    address: "632 TX-16, Bandera, TX 78003",
+    phone: "(830) 796-9400",
+    hours:
+      "Google Maps hours: Mon closed; Tue-Sat 11 a.m.-9 p.m.; Sun 11 a.m.-8 p.m. A June 2025 Bandera County eateries PDF lists Tue-Sun 11 a.m.-9 p.m., closed Monday (Sunday close disagrees with Google Maps). Thanksgiving Thursday hours are UNVERIFIED. Call (830) 796-9400 before treating Thursday as an option.",
+    hoursUnverified: true,
+    dishes: [
+      {
+        name: "Cheese ravioli",
+        detail:
+          "Third-party listing: ricotta-filled ravioli with tomato sauce. Order-page name: Cheese Ravioli ($14.99). Confirm the sauce has no meat stock.",
+        unverified: true,
+        unverifiedReason: "Vegetarian status UNVERIFIED. Sauces and broth are unconfirmed.",
+      },
+      {
+        name: "Spinach manicotti",
+        detail:
+          "Menusweb lists manicotti filled with ricotta and spinach, baked in marinara with mozzarella. The order page only says Manicotti ($14.99), without spinach. Confirm filling and sauce.",
+        unverified: true,
+        unverifiedReason: "Spinach filling is from a third-party menu, not the order page. Vegetarian status UNVERIFIED.",
+      },
+      {
+        name: "Fettuccine alfredo",
+        detail:
+          "Listed on both Menusweb and the order page (Fettuccine Alfredo, $14.99). Cream sauce: dairy is likely, meat stock is UNVERIFIED. The owner is strict ovo-lacto, so ask whether the Alfredo (and any marinara) uses meat broth.",
+        unverified: true,
+        unverifiedReason: "Sauces and broth unconfirmed.",
+      },
+      {
+        name: "Cheese bread / garlic cheese bread",
+        detail:
+          "Menusweb: cheese bread. Order page: Garlic Cheese Bread ($9.99) and Breadsticks with marinara ($12.99). Confirm butter/sauce.",
+        unverified: true,
+        unverifiedReason: "Vegetarian status UNVERIFIED.",
+      },
+      {
+        name: "Cheese pizza",
+        detail:
+          "Order page: Cheese Pizza, classic cheese or create your own ($14.99). Skip meat toppings. Confirm the crust and sauce have no meat products.",
+        unverified: true,
+        unverifiedReason: "Crust and sauce ingredients UNVERIFIED.",
+      },
+      {
+        name: "Other meat-free-looking order-page names",
+        detail:
+          "Eggplant Parmigiana, Spaghetti with Marinara Sauce, Spaghetti with Mushrooms, Mozzarella Caprese, Bruschetta, Greek Salad, Pap's Salad. Still ask about stock, lard, and shared fryers. Skip Caesar (dressing often contains anchovy).",
+        unverified: true,
+        unverifiedReason: "Sauces, broth, and fryer oil UNVERIFIED.",
+      },
+    ],
+    ask: [
+      "Call (830) 796-9400. Do not assume they are open Thanksgiving Thursday.",
+      "Ask whether marinara, Alfredo, and any soup/broth use meat stock.",
+      "Confirm manicotti filling (spinach vs cheese only) if that matters.",
+      "Skip Caesar unless they confirm no anchovy.",
+    ],
+    notes: [
+      "Google Maps listing cited for this roadbook: 4.6 stars from 893 reviews; inexpensive. Rating and review count can change.",
+      "Slot as Friday or Saturday dinner. Sunday regular hours (Google Maps: 11 a.m.-8 p.m.) are a fallback only if still in town; still call.",
+    ],
+    sources: [S.papsMaps, S.papsMenuWeb, S.papsSlice, S.papsCounty],
+  },
+  {
+    rank: 3,
     name: "Paniolo Winery",
     blurb: "Tapas and wine; strong meat-free small plates. Venue is labeled 21+.",
     address: "1003 Maple Street, Bandera, TX",
@@ -491,7 +620,7 @@ export const foodPicks: FoodCard[] = [
     sources: [S.paniolo, S.panioloMenu],
   },
   {
-    rank: 3,
+    rank: 4,
     name: "China Bowl",
     blurb:
       "Most tofu / vegetable entree names, but confirm broth and sauces. Official menu page did not render dish names to the fetch tool (likely a JS ordering widget).",
@@ -551,7 +680,7 @@ export const foodPicks: FoodCard[] = [
     sources: [S.chinaBowl, S.chinaBowlMenu, S.menupix],
   },
   {
-    rank: 4,
+    rank: 5,
     name: "Mamacita's, Kerrville",
     blurb: "Nearby official-menu option (~40 min / 28.4 mi). Items can be vegetarian if prepared without lard, meat stock, or meat toppings.",
     address: "215 Junction Highway, Kerrville, TX 78028",
@@ -594,7 +723,7 @@ export const foodPicks: FoodCard[] = [
     sources: [S.mamacitas],
   },
   {
-    rank: 5,
+    rank: 6,
     name: "Cook from Lowe's Market / an H-E-B stop",
     blurb:
       "Essential on Thanksgiving, when Lowe's Market is closed and restaurant hours are unverified.",
@@ -625,10 +754,10 @@ export const foodPicks: FoodCard[] = [
     ],
     ask: [
       "No H-E-B was verified inside Bandera city limits from official H-E-B Plus location lists or OpenStreetMap.",
-      "Best Thursday move: shop in College Station or at an H-E-B along I-35 / Loop 1604 before noon, then cook or snack at the ranch.",
+      "Best Thursday move: shop at an H-E-B in Katy before noon (chain-wide hours reported 6 a.m.-noon; UNVERIFIED for the specific store), then cook or snack at the ranch.",
       "OTA listings say some Flying L units have kitchenettes or full kitchens; UNVERIFIED for this specific unit.",
     ],
-    sources: [S.lowes, S.heb, S.khou],
+    sources: [S.lowes, S.heb, S.khou, S.fox4heb],
   },
 ];
 
@@ -664,54 +793,65 @@ export const days: DayPlan[] = [
   {
     id: "thu",
     date: "Thursday, Nov 26, 2026",
+    weekday: "Thu",
     short: "Thu 26",
-    title: "Thanksgiving, travel day",
+    title: "Katy to Flying L",
     weather: { high: "62°F", low: "35°F", sky: "Sunny" },
-    chips: ["confirm Thanksgiving hours", "confirm check-in"],
     items: [
       {
-        time: "7:00-8:00 a.m. CT",
-        title: "Leave College Station after breakfast",
-        body: "If the cooler is not already packed, make an H-E-B run first (chain-wide hours reported 6 a.m.-noon; confirm the College Station store). Live route: Google Maps. Typical path: TX-21 / TX-71 to I-35, Loop 1604, TX-16 / TX-173, then Wharton's Dock Road (35 mph zone). Allow about 5 hours on Thanksgiving; OSRM without traffic is 4 hours 9 minutes.",
+        time: "6:00 a.m.–noon",
+        title: "H-E-B in Katy before noon",
+        body: "Shop an H-E-B in Katy before leaving. Chain-wide Thanksgiving hours are reported 6 a.m.–noon (pharmacies closed; curbside 7–11 a.m. in those roundups). UNVERIFIED for the specific Katy store: check heb.com or call. Lowe's Market in Bandera is closed today.",
         unverified: true,
-        unverifiedReason: "H-E-B chain-wide Thanksgiving hours are from a Nov 20, 2026 TEGNA/KHOU roundup and may vary locally. UNVERIFIED for the specific store.",
-        sources: [S.mapsDrive, S.osrm, S.khou, S.heb, S.prophetNews],
+        unverifiedReason:
+          "H-E-B chain-wide Thanksgiving hours are from Nov 19–20, 2026 news roundups (KHOU/TEGNA, FOX 4). UNVERIFIED for the specific store.",
+        sources: [S.khou, S.fox4heb, S.heb, S.lowes],
       },
       {
-        time: "Late morning",
-        title: "Optional last grocery stop",
-        body: "H-E-B along I-35 or Loop 1604 before noon. Bandera Lowe's Market is closed today.",
-        chips: ["confirm Thanksgiving hours"],
-        sources: [S.lowes, S.heb, S.khou],
+        time: "Before the interstate",
+        title: "Optional: Buc-ee's Katy",
+        body: "27700 Katy Fwy, Katy, TX 77494. On I-10 at the start of the drive (~4 min / 2.1 mi from the Katy city point). Official FAQ: all Buc-ee's open 24 hours a day, 365 days a year. Kitchen: breakfast 4:00–10:30 a.m.; BBQ sandwiches and chicken tenders from 10:30 a.m. Vegetarian-aware: beaver nuggets, chips, fudge, fruit cups, and some cold items are the safer bets; BBQ sandwiches are meat. Cold sandwiches, wraps, and salads: ingredients UNVERIFIED. OSRM Katy Buc-ee's to Flying L: about 3 hours 54 minutes, 216 miles (no traffic).",
+        sources: [S.buceesFaq, S.buceesLocations, S.osrm, S.mapsDrive],
       },
       {
-        time: "~12:00-1:00 p.m.",
-        title: "Aim to arrive in the Bandera area",
-        body: "If the room is not ready, have a picnic from the cooler in town or at a scenic pull-off. Do not count on a restaurant being open until you call.",
-        chips: ["confirm Thanksgiving hours", "confirm check-in"],
+        time: "Leave after groceries",
+        title: "Katy → Flying L on I-10 west",
+        body: "Live route: Google Maps (Katy, TX to 675 Flying L Dr). OSRM no-traffic, Nov 23, 2026: 3 hours 57 minutes, 218 miles (237.1 min, 217.58 mi). Highway sequence: I-10 W (Katy Freeway) through the San Antonio side, Loop 1604 W (Anderson Loop), FM 1560 / TX-16 Bandera Road, TX-173, Wharton's Dock Road (35 mph zone), Flying L Drive. Working plan, not a verified clock: if the car leaves Katy around 9:00 a.m. after shopping, OSRM puts arrival near 12:57 p.m. Thanksgiving traffic can add time; do not treat 12:57 as a promise.",
+        sources: [S.mapsDrive, S.osrm, S.osrmOut, S.prophetNews],
+      },
+      {
+        time: "~1 hr 55 min from Katy",
+        title: "Optional: Buc-ee's Luling on I-10",
+        body: "10070 West IH 10, Luling, TX 78648. On I-10 between Katy and San Antonio. OSRM: Katy to this store 1 hour 55 minutes / 109.2 miles; store to Flying L 2 hours 6 minutes / 109.0 miles. Routing Katy → this store → Flying L is 4 hours 1 minute / 218.3 miles, about 4 minutes longer than the direct OSRM path. Same 24/7 / 365 hours as the FAQ. Same vegetarian caveat as Katy.",
+        sources: [S.buceesFaq, S.buceesLocations, S.osrm, S.mapsDrive],
+      },
+      {
+        time: "Same morning",
+        title: "Call ahead",
+        body: "Flying L front desk (830) 796-7745 for check-in, restaurant hours, and whether campfire/s'mores or a wagon ride are on tonight. TJ's (830) 796-9990. China Bowl (830) 796-8494. OST (830) 796-3836. Pap's (830) 796-9400 only to ask hours: do not treat Pap's as Thursday dinner unless they confirm they are open.",
+        callToConfirm: "Call to confirm. Do not assume any Bandera kitchen is open Thursday.",
+        sources: [S.flyinglContact, S.tjs, S.chinaBowl, S.ost, S.papsMaps],
+      },
+      {
+        time: "Early afternoon",
+        title: "Arrive in the Bandera area",
+        body: "If the room is not ready, picnic from the cooler in town or at a scenic pull-off. Do not count on a restaurant until someone confirms it is open. Confirm check-in with the front desk.",
         unverified: true,
         unverifiedReason: "Thursday restaurant openings in Bandera are UNVERIFIED. Check-in time is OTA-based.",
         sources: [S.tjs, S.chinaBowl, S.ost, S.flyinglActivities, S.booking],
       },
       {
-        time: "Same morning",
-        title: "Call ahead",
-        body: "Flying L front desk (830) 796-7745 for check-in time, restaurant hours, and whether campfire/s'mores or a wagon ride are on for tonight; TJ's (830) 796-9990; China Bowl (830) 796-8494; OST (830) 796-3836.",
-        chips: ["confirm Thanksgiving hours", "confirm check-in"],
-        callToConfirm: "Call to confirm. Do not assume any Bandera kitchen is open Thursday.",
-        sources: [S.flyinglContact, S.tjs, S.chinaBowl, S.ost],
-      },
-      {
         time: "Afternoon, if energy remains",
         title: "Easy walk on Main Street",
-        body: "After dark, courthouse lights at 500 Main St. Hill Country SNA is open again from 6:00 a.m., but daylight will be short and HQ closes at noon; better saved for Friday or Sunday if the drive already ate the day.",
-        sources: [S.bbaChristmas, S.hillCountrySna],
+        body: "After dark, courthouse lights at 500 Main St. Hill Country SNA is open again from 6:00 a.m., but daylight will be short and HQ closes at noon; better saved for Friday or Sunday if the drive already ate the day. Frontier Times Museum lists Mon–Sat 10:00 a.m.–4:30 p.m.; Thanksgiving Day hours are UNVERIFIED (a third-party museum guide says closed Thanksgiving). Bandera Natural History and Art Museum lists Wed–Sat 10 a.m.–5 p.m.; Thanksgiving hours UNVERIFIED.",
+        unverified: true,
+        unverifiedReason: "Thanksgiving hours for both museums are UNVERIFIED on the official pages fetched.",
+        sources: [S.bbaChristmas, S.hillCountrySna, S.frontierTimes, S.banderaNhm],
       },
       {
         time: "4:00 p.m. (confirm)",
         title: "Check in at 675 Flying L Dr",
-        body: "Working assumption from OTAs only. Confirm with the front desk.",
-        chips: ["confirm check-in"],
+        body: "Working assumption from OTAs only. Confirm check-in with the front desk.",
         unverified: true,
         unverifiedReason: "Check-in/out not published on flyingl.com.",
         callToConfirm: "Call (830) 796-7745 to confirm check-in.",
@@ -720,16 +860,15 @@ export const days: DayPlan[] = [
       {
         time: "Dinner",
         title: "Cooler first, then whoever confirmed they are open",
-        body: "First choice: food from the cooler in the unit. Second: whatever in-town kitchen confirmed it is open (TJ's Vegetarian Pasta or Beyond Burger; China Bowl tofu dishes if they are open and confirm no meat broth). Third: Flying L restaurant only if they confirm a vegetarian plate.",
-        chips: ["confirm Thanksgiving hours"],
+        body: "First choice: food from the cooler in the unit. Second: whatever in-town kitchen confirmed it is open (TJ's Vegetarian Pasta or Beyond Burger; China Bowl tofu dishes if they are open and confirm no meat broth). Third: Flying L restaurant only if they confirm a vegetarian plate. Pap's is not the Thursday plan unless they confirm they are open.",
         unverified: true,
-        unverifiedReason: "Thursday restaurant openings, Flying L menu, and unit kitchenette are UNVERIFIED.",
-        sources: [S.tjsMenu, S.menupix, S.flyinglActivities],
+        unverifiedReason: "Thursday restaurant openings, Flying L menu, unit kitchenette, and Pap's Thanksgiving hours are UNVERIFIED.",
+        sources: [S.tjsMenu, S.menupix, S.flyinglActivities, S.papsMaps],
       },
       {
         time: "Evening",
         title: "Jacket weather (low around 35°F)",
-        body: "If the ranch is running campfire and s'mores (listed Tue-Sat), that is the on-site plan. S'mores are typically vegetarian; confirm marshmallows/gelatin if that matters. Courthouse lights if not already seen.",
+        body: "If the ranch is running campfire and s'mores (listed Tue–Sat), that is the on-site plan. S'mores are typically vegetarian; confirm marshmallows/gelatin if that matters. Courthouse lights if not already seen.",
         unverified: true,
         unverifiedReason: "Campfire and s'mores times of day are UNVERIFIED.",
         sources: [S.flyinglActivities, S.nwsPoint, S.bbaChristmas],
@@ -739,22 +878,38 @@ export const days: DayPlan[] = [
   {
     id: "fri",
     date: "Friday, Nov 27, 2026",
+    weekday: "Fri",
     short: "Fri 27",
-    title: "Lost Maples or Hill Country, then Dickens or River Walk, music at night",
+    title: "Hikes, Dickens or Cibolo, Pap's dinner",
     weather: { high: "63°F", low: "38°F", sky: "Mostly sunny" },
-    chips: [],
     items: [
+      {
+        time: "Breakfast",
+        title: "OST breakfast (call first)",
+        body: "Old Spanish Trail Restaurant, 311 Main Street, (830) 796-3836. Regular hours include Friday 7 a.m.–8 p.m. Breakfast is implied by the 7 a.m. opening; named vegetarian breakfast items were not on the homepage. Salad bar is mentioned (add $5.95). Treat as a maybe-breakfast after calling. BYOB.",
+        unverified: true,
+        unverifiedReason: "No named vegetarian breakfast items on the official homepage. Confirm Friday hours.",
+        sources: [S.ost],
+      },
       {
         time: "Morning, pick one outdoor block",
         title: "Option A: Lost Maples (needs a day pass)",
-        body: "Leave the ranch by 7:30-8:00 a.m. for Lost Maples (open 8:30-4:30, ~54 min / 41.5 mi). Hike, picnic from the cooler. Recheck the foliage line and trail status. Be back on the road early enough for the evening plan. Reserve a day pass; Thanksgiving week is called out as busy. Cell service is not available in the natural area.",
-        sources: [S.lostMaples, S.lostMaplesFoliage, S.dayPassFaqs, S.reserveAmerica],
+        body: "Leave the ranch by 7:30–8:00 a.m. for Lost Maples (open 8:30–4:30, ~54 min / 41.5 mi). Hike, picnic from the cooler. Recheck the foliage line and trail status. Be back on the road early enough for the evening plan. Reserve a day pass; Thanksgiving week is called out as busy. Cell service is not available in the natural area. Optional stop in Medina at Love Creek Orchards (store/bakery 9 a.m.–5 p.m. every day on the contact page; patio cafe 11 a.m.–3 p.m.). That page also says Closed for Holidays: Friday hours UNVERIFIED. Cafe lists burgers, sandwiches, and grilled/fried items; vegetarian plates UNVERIFIED. Bakery pies and ice cream may be ovo-lacto; coconut/gelatin UNVERIFIED. OSRM Flying L to Love Creek: about 20 min / 15.1 mi.",
+        unverified: true,
+        unverifiedReason: "Love Creek holiday hours and vegetarian cafe items UNVERIFIED.",
+        sources: [S.lostMaples, S.lostMaplesFoliage, S.dayPassFaqs, S.reserveAmerica, S.loveCreek, S.loveCreekHours],
       },
       {
         time: "Morning alternative",
         title: "Option B: Hill Country SNA (shorter, closer)",
-        body: "~21 min / 12.3 mi. West Peak Overlook is a staff favorite (steep). Bring water. No park store. Day-use reservations highly recommended. Adult $6; 12 and under free.",
+        body: "~21 min / 12.3 mi. West Peak Overlook is a staff favorite (steep). Bring water. No park store. Day-use reservations highly recommended. Adult $6; 12 and under free. Reopened 6:00 a.m. Thursday after the hunt.",
         sources: [S.hillCountrySna, S.dayPassFaqs, S.reserveAmerica],
+      },
+      {
+        time: "Late morning / afternoon in town",
+        title: "Frontier Times Museum",
+        body: "510 13th Street, Bandera, (830) 796-3864. Official hours Monday–Saturday 10:00 a.m.–4:30 p.m. (closed Sunday). Admission: adults $10, seniors $8, military $8, ages 6–17 $5, under 6 free. OSRM from the ranch: about 4 min / 2.2 mi. Friday is a regular open day on that schedule. The bigger programmed event is Saturday's Native American Heritage Day.",
+        sources: [S.frontierTimes, S.frontierEvents],
       },
       {
         time: "Lunch",
@@ -765,29 +920,37 @@ export const days: DayPlan[] = [
       {
         time: "Afternoon / evening, pick one festive block",
         title: "Recommended: Dickens on Main, Boerne",
-        body: "Friday, Nov 27, 12:00 p.m.-9:00 p.m., downtown Boerne. Drive ~39 min / 26.7 mi. Market and lights in daylight; tree lighting 6:00-6:30 p.m. at the gazebo. Eat before or after at a known kitchen, or inspect vendor food carefully. Vegetarian options at food vendors are UNVERIFIED. See the official page for the full grid rather than treating this as a complete schedule.",
+        body: "Friday, Nov 27, 12:00 p.m.–9:00 p.m., downtown Boerne. Drive ~39 min / 26.7 mi. Market and lights in daylight; tree lighting 6:00–6:30 p.m. at the gazebo. Eat before or after at a known kitchen (Pap's in Bandera is the suggested dinner, so either return for Pap's or inspect Boerne vendor food carefully). Vegetarian options at food vendors are UNVERIFIED. See the official page for the full grid rather than treating this as a complete schedule.",
         unverified: true,
         unverifiedReason: "Dickens food-vendor vegetarian options UNVERIFIED.",
         sources: [S.dickens, S.dickensChamber],
       },
       {
+        time: "Same Boerne side trip",
+        title: "Cibolo Nature Center trails",
+        body: "140 City Park Road, Boerne, TX 78006. Official: trails free, dawn to dusk every day; visitor center Monday–Friday 9 a.m.–4:30 p.m. More than six miles of trails, picnic tables, dogs leashed. Black Friday visitor-center hours UNVERIFIED (Friday is on the published weekday schedule). OSRM from Flying L: about 40 min / 28.7 mi. Pairs with Dickens; do not also add San Antonio the same night.",
+        unverified: true,
+        unverifiedReason: "Visitor-center hours on Nov 27 UNVERIFIED.",
+        sources: [S.cibolo, S.dickens],
+      },
+      {
         time: "Alternative, longer",
         title: "Downtown San Antonio: first night of River Walk lights",
-        body: "River Walk holiday lights are illuminated November 27-January 11 (dawn). They are not yet on Thanksgiving night. Fri Nov 27, 6:00 p.m.: 45th Annual Ford Holiday River Parade (ticketed). Fri Nov 27, 4:00-7:00 p.m. (tree lighting at 6:00 p.m.): free H-E-B Christmas Tree Lighting at Travis Park. Check SA.gov/GoDowntown for closures. About 70 min / 51.4 mi each way and a late return. Conflicts with Dickens' 6:00 p.m. tree lighting and may skip 11th Street.",
+        body: "River Walk holiday lights are illuminated November 27–January 11 (dawn). They are not yet on Thanksgiving night. Fri Nov 27, 6:00 p.m.: 45th Annual Ford Holiday River Parade (ticketed). Fri Nov 27, 4:00–7:00 p.m. (tree lighting at 6:00 p.m.): free H-E-B Christmas Tree Lighting at Travis Park. Check SA.gov/GoDowntown for closures. About 70 min / 51.4 mi each way and a late return. Conflicts with Dickens' 6:00 p.m. tree lighting, Cibolo, Pap's at a reasonable hour, and may skip 11th Street.",
         sources: [S.saHolidays, S.goDowntown],
       },
       {
         time: "Dinner",
-        title: "Known kitchen, after confirming hours",
-        body: "If staying in the Hill Country: TJ's (open until 10 p.m. on the regular Friday schedule; confirm) or Paniolo if it is open (hours UNVERIFIED). In Boerne, only after checking a menu for a meat-free dish.",
+        title: "Pap's Italian Grill (suggested Friday dinner)",
+        body: "632 TX-16, Bandera, (830) 796-9400. Google Maps hours: Tue–Sat 11 a.m.–9 p.m. (closed Monday). OSRM from the ranch: about 5 min / 2.4 mi. Inexpensive pasta and pizza. Ask about meat stock in marinara and Alfredo. Named dishes on third-party and order pages include cheese ravioli, manicotti, fettuccine Alfredo, garlic cheese bread, and cheese pizza; vegetarian status of sauces and broth is UNVERIFIED. Call before driving over. Backup: TJ's (regular Friday until 10 p.m.; confirm) or Paniolo if it is open (hours UNVERIFIED).",
         unverified: true,
-        unverifiedReason: "Confirm Friday hours. Paniolo weekly hours UNVERIFIED.",
-        sources: [S.tjs, S.paniolo],
+        unverifiedReason: "Confirm Friday hours. Pap's sauces/broth and Paniolo weekly hours UNVERIFIED.",
+        sources: [S.papsMaps, S.papsMenuWeb, S.papsSlice, S.tjs, S.paniolo],
       },
       {
-        time: "Night (if back in Bandera in time)",
+        time: "8:30 p.m.–12:30 a.m.",
         title: "Rick Rice Band at 11th Street Cowboy Bar",
-        body: "Fri Nov 27, 8:30 p.m.-12:30 a.m. 307 11th Street, Bandera, (830) 796-4849.",
+        body: "Fri Nov 27, 8:30 p.m.–12:30 a.m. 307 11th Street, Bandera, (830) 796-4849.",
         sources: [S.rickRice, S.eleventh],
       },
     ],
@@ -795,47 +958,71 @@ export const days: DayPlan[] = [
   {
     id: "sat",
     date: "Saturday, Nov 28, 2026",
+    weekday: "Sat",
     short: "Sat 28",
-    title: "Cave or Kerrville, Dickens leftover, Kin Faux",
+    title: "Museum day, cave or Kerrville, Pap's if not Friday, Kin Faux",
     weather: { high: "71°F", low: "44°F", sky: "Sunny" },
-    chips: [],
     items: [
       {
-        time: "Morning",
+        time: "Breakfast",
+        title: "OST or the cooler",
+        body: "OST regular Saturday hours 7 a.m.–8 p.m.; still no named vegetarian breakfast on the homepage. Call (830) 796-3836.",
+        unverified: true,
+        unverifiedReason: "Named vegetarian breakfast items UNVERIFIED.",
+        sources: [S.ost],
+      },
+      {
+        time: "11:00 a.m.–2:00 p.m.",
+        title: "Frontier Times Museum: Native American Heritage Day",
+        body: "Saturday, Nov 28, 11:00 a.m.–2:00 p.m. at 510 13th Street. Official events page: first Native American Heritage Day; frybread over a campfire, beaded bracelets, arrowhead digging, atlatl, demonstrators. Regular museum hours that day are still 10:00 a.m.–4:30 p.m. Frybread is often made with lard; vegetarian status UNVERIFIED. Ask before eating anything at the event.",
+        unverified: true,
+        unverifiedReason: "Event food (including frybread) is UNVERIFIED for a strict ovo-lacto diet.",
+        sources: [S.frontierEvents, S.frontierTimes],
+      },
+      {
+        time: "Morning alternative",
         title: "Cave Without a Name (book a tour)",
-        body: "325 Kreutzberg Rd, Boerne. Winter-season hours (Labor Day-Memorial Day): 10 a.m.-5 p.m., last tour 4 p.m. About 60-minute guided tour; 66°F inside. Arrive 15-20 minutes early. Closed Thanksgiving Day and Christmas Day (not today). ~68 min / 37.5 mi. Combine with more Dickens on Main (noon-9 p.m.) because the cave is on the Boerne side.",
+        body: "325 Kreutzberg Rd, Boerne. Winter-season hours (Labor Day–Memorial Day): 10 a.m.–5 p.m., last tour 4 p.m. About 60-minute guided tour; 66°F inside. Arrive 15–20 minutes early. Closed Thanksgiving Day and Christmas Day (not today). ~68 min / 37.5 mi. Combine with more Dickens on Main (noon–9 p.m.) because the cave is on the Boerne side.",
         sources: [S.cave, S.dickens],
       },
       {
         time: "Alternative morning",
         title: "Kerrville Christmas Indian Market at MOWA, then Mamacita's",
-        body: "1550 Bandera Highway, Kerrville, (830) 896-2553. Usable days are Fri Nov 27 and Sat Nov 28, 10:00 a.m.-4:00 p.m. (hours within that window should be confirmed with the museum). Then Mamacita's: spinach quesadilla / bean nachos or chalupas, after asking about lard and stock. Kerrville ~38 min / 27.7 mi; Mamacita's ~40 min.",
+        body: "1550 Bandera Highway, Kerrville, (830) 896-2553. Usable days are Fri Nov 27 and Sat Nov 28, 10:00 a.m.–4:00 p.m. (hours within that window should be confirmed with the museum). Then Mamacita's: spinach quesadilla / bean nachos or chalupas, after asking about lard and stock. Kerrville ~38 min / 27.7 mi; Mamacita's ~40 min.",
         sources: [S.kerrvilleMarket, S.mowa, S.mamacitas],
       },
       {
         time: "Alternative big hike",
         title: "If Lost Maples was skipped Friday",
-        body: "Lost Maples or Garner (Garner is a longer 83 min drive). Guadalupe River SP is a middle-distance trail day; Honey Creek tour would need prior registration. Do not try to add Enchanted Rock or Natural Bridge Caverns plus Dickens plus a dance hall in the same day.",
-        sources: [S.lostMaples, S.garner, S.guadalupe, S.enchantedRock, S.nbc],
+        body: "Lost Maples or Garner (Garner is a longer 83 min drive). Optional Love Creek Orchards stop in Medina on the way (store/bakery 9–5 daily on the contact page; Closed for Holidays, so Saturday UNVERIFIED). Guadalupe River SP is a middle-distance trail day; Honey Creek tour would need prior registration. Do not try to add Enchanted Rock or Natural Bridge Caverns plus Dickens plus a dance hall in the same day.",
+        unverified: true,
+        unverifiedReason: "Love Creek holiday/Saturday hours UNVERIFIED.",
+        sources: [S.lostMaples, S.garner, S.guadalupe, S.enchantedRock, S.nbc, S.loveCreekHours],
+      },
+      {
+        time: "Afternoon in town",
+        title: "Bandera Natural History and Art Museum",
+        body: "267 Old San Antonio Rd, Bandera, (830) 328-5090. Official hours: Wednesday–Saturday 10 a.m.–5 p.m.; Sunday noon–5 p.m.; closed Monday and Tuesday. Admission: adult $14; seniors 65+ / military & vet $12; student with ID $10; youth 4–12 $9; 3 and under free; Bandera County students free. DinoWalk outdoor models, dioramas, New Spain art. OSRM from the ranch: about 5 min / 2.5 mi. Saturday is a regular open day.",
+        sources: [S.banderaNhm],
       },
       {
         time: "Late afternoon",
-        title: "Back to the ranch, or more Main Street",
-        body: "Wagon ride / campfire if still offered (listed through Saturday).",
+        title: "Back to the ranch, or more Main Street / Medina River",
+        body: "Wagon ride / campfire if still offered (listed through Saturday). Bandera City Park / Medina River at 1102 Maple Street: river access; park hours UNVERIFIED after a recent ordinance change. Stay away from dams and private banks; check water conditions.",
         unverified: true,
-        unverifiedReason: "Wagon ride and campfire times of day UNVERIFIED.",
-        sources: [S.flyinglActivities],
+        unverifiedReason: "Wagon ride and campfire times of day UNVERIFIED. City Park hours UNVERIFIED.",
+        sources: [S.flyinglActivities, S.cityCal, S.prophetNews],
       },
       {
         time: "Dinner",
-        title: "TJ's or Paniolo small plates if open",
-        body: "TJ's Vegetarian Pasta or Beyond Burger (regular Saturday hours until 10 p.m.; confirm), or Paniolo small plates if open.",
+        title: "Pap's if Friday did not happen; otherwise TJ's or Paniolo",
+        body: "Pap's is the suggested Saturday dinner if Friday went to Dickens late or San Antonio. Same Google Maps hours (Sat 11 a.m.–9 p.m.). Call (830) 796-9400. Otherwise TJ's Vegetarian Pasta or Beyond Burger (regular Saturday hours until 10 p.m.; confirm), or Paniolo small plates if open.",
         unverified: true,
-        unverifiedReason: "Confirm Saturday hours. Paniolo weekly hours UNVERIFIED.",
-        sources: [S.tjs, S.tjsMenu, S.panioloMenu],
+        unverifiedReason: "Confirm Saturday hours. Pap's sauces/broth and Paniolo weekly hours UNVERIFIED.",
+        sources: [S.papsMaps, S.papsMenuWeb, S.papsSlice, S.tjs, S.tjsMenu, S.panioloMenu],
       },
       {
-        time: "Night",
+        time: "8:00 p.m. (doors 7:00 p.m.)",
         title: "Kin Faux at 11th Street",
         body: "Sat Nov 28, 8:00 p.m., doors 7:00 p.m. Tickets via Outhouse: GA $15 advance / $20 day of show, plus reserved and VIP table options. Rain-or-shine, non-refundable as stated on the ticket page. Buy tickets in advance.",
         sources: [S.outhouse, S.eleventh, S.onat8],
@@ -843,10 +1030,9 @@ export const days: DayPlan[] = [
       {
         time: "Optional, UNVERIFIED",
         title: "Arkey Blue's Silver Dollar",
-        body: "308 Main Street. A Saturday-night residency for Arkey Blue and the Blue Cowboys at 8:00 p.m., including Nov 28, is repeated on secondary calendars. Treat Nov 28 at 8:00 p.m. as UNVERIFIED until confirmed with the venue or a Bandera Bulletin / CVB calendar for that week. No official venue page with a Nov 26-29 grid was confirmed.",
+        body: "308 Main Street. A Saturday-night residency for Arkey Blue and the Blue Cowboys at 8:00 p.m., including Nov 28, is repeated on secondary calendars. Treat Nov 28 at 8:00 p.m. as UNVERIFIED until confirmed with the venue or a Bandera Bulletin / CVB calendar for that week. No official venue page with a Nov 26–29 grid was confirmed.",
         unverified: true,
-        unverifiedReason:
-          "Treat Nov 28 at 8:00 p.m. as UNVERIFIED until confirmed with the venue.",
+        unverifiedReason: "Treat Nov 28 at 8:00 p.m. as UNVERIFIED until confirmed with the venue.",
         sources: [S.hillCountryAi, S.cvbNov],
       },
     ],
@@ -854,16 +1040,15 @@ export const days: DayPlan[] = [
   {
     id: "sun",
     date: "Sunday, Nov 29, 2026",
+    weekday: "Sun",
     short: "Sun 29",
-    title: "Checkout, easy morning, then either tree lighting or an earlier drive home",
+    title: "Checkout, then early Katy return or Country Christmas",
     weather: { high: "73°F", sky: "Sunny" },
-    chips: ["confirm check-in"],
     items: [
       {
         time: "By 10:00 a.m. (confirm)",
         title: "Checkout",
-        body: "Ask if bags can be held if staying for the 4:30 p.m. event.",
-        chips: ["confirm check-in"],
+        body: "Ask if bags can be held if staying for the 4:30 p.m. event. Confirm checkout with the front desk.",
         unverified: true,
         unverifiedReason: "Checkout by 10:00 a.m. is OTA-based, not published on flyingl.com.",
         callToConfirm: "Call to confirm checkout and bag hold.",
@@ -872,22 +1057,22 @@ export const days: DayPlan[] = [
       {
         time: "Morning",
         title: "Nicest weather of the trip (sunny, high near 73°F)",
-        body: "Short hike at Hill Country SNA, or coffee and a walk at Bandera City Park / Medina River, or a last look at Main Street. If a late brunch kitchen is open (OST regular Sunday 7 a.m.-8 p.m., TJ's 11 a.m.-8 p.m.; confirm), use a known vegetarian item or the cooler.",
+        body: "Short hike at Hill Country SNA, or coffee and a walk at Bandera City Park / Medina River, or a last look at Main Street. Frontier Times is closed Sunday (Mon–Sat only). Bandera Natural History and Art Museum is listed Sunday noon–5 p.m. If a late brunch kitchen is open (OST regular Sunday 7 a.m.–8 p.m., TJ's 11 a.m.–8 p.m.; confirm), use a known vegetarian item or the cooler. Pap's Google Maps Sunday hours are 11 a.m.–8 p.m.; still not the planned dinner unless Friday and Saturday both missed it, and still call.",
         unverified: true,
         unverifiedReason: "Confirm Sunday restaurant hours. City Park hours UNVERIFIED.",
-        sources: [S.nwsPoint, S.hillCountrySna, S.ost, S.tjs, S.prophetNews],
+        sources: [S.nwsPoint, S.hillCountrySna, S.ost, S.tjs, S.frontierTimes, S.banderaNhm, S.papsMaps, S.prophetNews],
       },
       {
         time: "Return plan A",
-        title: "Earlier return",
-        body: "Leave Bandera around 12:00-1:00 p.m., back in College Station mid-to-late afternoon. Misses the tree lighting; courthouse lights were already visible earlier in the weekend. Drive is about 4 hours 9 minutes without traffic (OSRM).",
-        sources: [S.mapsDrive, S.osrm, S.cityCal, S.prophetCommunity],
+        title: "Earlier return to Katy",
+        body: "Leave Bandera around 12:00–1:00 p.m. OSRM no-traffic return is 3 hours 56 minutes (235.6 min, 217.78 mi), so a noon departure lands in Katy about 3:56 p.m.; a 1:00 p.m. departure about 4:56 p.m. Live Google Maps: Flying L to Katy. Misses the tree lighting; courthouse lights were already visible earlier in the weekend. Optional Buc-ee's Luling on I-10 east.",
+        sources: [S.mapsDriveBack, S.osrm, S.osrmBack, S.cityCal, S.prophetCommunity, S.buceesLocations],
       },
       {
-        time: "Return plan B",
-        title: "Stay for Country Christmas in the Park",
-        body: "Sunday, Nov 29, 4:30-6:30 p.m., Bandera City Park entrance, 1102 Maple Street. Admission free. Official tree and trail lighting. Leave town soon after 6:30-7:00 p.m. Expected arrival in College Station around 11:00 p.m. or later. Eat a vegetarian early dinner in Bandera (TJ's is regularly open until 8 p.m. Sunday; confirm) or pack car food for the night drive.",
-        sources: [S.cityCal, S.prophetCommunity, S.gillTeich, S.tjs, S.mapsDrive],
+        time: "4:30–6:30 p.m.",
+        title: "Return plan B: Country Christmas in the Park, then night drive to Katy",
+        body: "Sunday, Nov 29, 4:30–6:30 p.m., Bandera City Park entrance, 1102 Maple Street. Admission free. Official tree and trail lighting. Leave town soon after 6:30–7:00 p.m. OSRM no-traffic: a 6:30 p.m. departure arrives in Katy about 10:26 p.m.; a 7:00 p.m. departure about 10:56 p.m. Sunday-weekend traffic can add time. Eat a vegetarian early dinner in Bandera (TJ's is regularly open until 8 p.m. Sunday; Pap's Google Maps Sunday 11 a.m.–8 p.m.; confirm either) or pack car food for the night drive.",
+        sources: [S.cityCal, S.prophetCommunity, S.gillTeich, S.tjs, S.papsMaps, S.mapsDriveBack, S.osrmBack],
       },
     ],
   },
@@ -997,8 +1182,20 @@ export const events: TripEvent[] = [
     title: "Country Christmas in the Park and official tree lighting",
     where: "Bandera City Park entrance, 1102 Maple Street. Admission free.",
     detail:
-      "The third annual Country Christmas in the Park and official Christmas tree lighting. City calendar lists Country Christmas in the Park all day Nov 29, and Trail of Lights: Country Christmas in the Park at 5:00 p.m. Nov 29. Local write-up summarizing the city's announcement: crafts, food vendors, bounce house, snow globes, reindeer, shopping, hot cocoa, live music, tree lighting, cookie competition; free admission. This is the main Bandera event of the stay, but it is Sunday late afternoon. If the return to College Station is mid-afternoon, this will be missed. A departure after 6:30 p.m. plus a ~4 hour drive means a late-night arrival in College Station (around 11 p.m., plus any traffic).",
-    sources: [S.cityCal, S.prophet, S.prophetCommunity, S.gillTeich],
+      "The third annual Country Christmas in the Park and official Christmas tree lighting. City calendar lists Country Christmas in the Park all day Nov 29, and Trail of Lights: Country Christmas in the Park at 5:00 p.m. Nov 29. Local write-up summarizing the city's announcement: crafts, food vendors, bounce house, snow globes, reindeer, shopping, hot cocoa, live music, tree lighting, cookie competition; free admission. This is the main Bandera event of the stay, but it is Sunday late afternoon. If the return to Katy is mid-afternoon, this will be missed. OSRM no-traffic after a 6:30 p.m. departure is about 10:26 p.m. in Katy; after 7:00 p.m. about 10:56 p.m. Weekend traffic can add time.",
+    sources: [S.cityCal, S.prophet, S.prophetCommunity, S.gillTeich, S.osrmBack, S.mapsDriveBack],
+  },
+  {
+    id: "frontier-heritage",
+    when: "Sat Nov 28, 11:00 a.m.-2:00 p.m.",
+    dates: ["2026-11-28"],
+    title: "Frontier Times Museum Native American Heritage Day",
+    where: "510 13th Street, Bandera, (830) 796-3864",
+    detail:
+      "Official events calendar: Saturday, Nov 28, 11:00 a.m.-2:00 p.m. First Native American Heritage Day at the museum. Listed activities include frybread over a campfire, beaded bracelets, arrowhead digging, atlatl, demonstrators and reenactors. Regular museum hours that day remain Monday-Saturday 10:00 a.m.-4:30 p.m. Frybread and other event food: vegetarian status UNVERIFIED (frybread is often made with lard). Ask before eating.",
+    unverified: true,
+    unverifiedReason: "Event food vegetarian status UNVERIFIED.",
+    sources: [S.frontierEvents, S.frontierTimes],
   },
 ];
 
@@ -1027,6 +1224,68 @@ export const drives: DriveRow[] = [
     reservations: "n/a",
     notes: "OST, TJ's, 11th Street, Arkey Blue's, courthouse lights, general store area.",
     sources: [S.ost, S.tjs, S.eleventh, S.bbaChristmas],
+  },
+  {
+    place: "Pap's Italian Grill, 632 TX-16, Bandera",
+    drive: "~5 min / 2.4 mi",
+    reservations: "No reservation found. Call (830) 796-9400. Thanksgiving hours UNVERIFIED.",
+    unverified: true,
+    unverifiedReason: "Thanksgiving hours UNVERIFIED. Google Maps vs county PDF disagree on Sunday close.",
+    notes: "Suggested Friday or Saturday dinner. Not Thursday unless they confirm they are open.",
+    sources: [S.papsMaps, S.papsSlice, S.papsMenuWeb, S.papsCounty],
+  },
+  {
+    place: "Frontier Times Museum, 510 13th Street",
+    drive: "~4 min / 2.2 mi",
+    reservations: "Walk-up. Adults $10. Mon-Sat 10:00 a.m.-4:30 p.m.; closed Sunday. Thanksgiving hours UNVERIFIED.",
+    unverified: true,
+    unverifiedReason: "Thanksgiving Day hours UNVERIFIED on the official site.",
+    notes: "Saturday Nov 28, 11:00 a.m.-2:00 p.m.: Native American Heritage Day (official events page).",
+    sources: [S.frontierTimes, S.frontierEvents],
+  },
+  {
+    place: "Bandera Natural History and Art Museum, 267 Old San Antonio Rd",
+    drive: "~5 min / 2.5 mi",
+    reservations: "Tickets on the official site. Wed-Sat 10 a.m.-5 p.m.; Sun noon-5 p.m.; closed Mon-Tue. Thanksgiving hours UNVERIFIED.",
+    unverified: true,
+    unverifiedReason: "Thanksgiving Day hours UNVERIFIED.",
+    notes: "DinoWalk, dioramas, New Spain art. Adult $14 as listed on banderanhm.org.",
+    sources: [S.banderaNhm],
+  },
+  {
+    place: "Love Creek Orchards, 14024 State Highway 16 North, Medina",
+    drive: "~20 min / 15.1 mi",
+    reservations: "n/a",
+    unverified: true,
+    unverifiedReason: "Contact page says Closed for Holidays. Thanksgiving and weekend holiday hours UNVERIFIED.",
+    notes:
+      "Store and bakery listed 9 a.m.-5 p.m. every day; patio cafe 11 a.m.-3 p.m. every day. Cafe describes burgers, sandwiches, grilled and fried items; vegetarian plates UNVERIFIED. Useful stop toward Lost Maples.",
+    sources: [S.loveCreek, S.loveCreekHours, S.lostMaples],
+  },
+  {
+    place: "Cibolo Nature Center, 140 City Park Road, Boerne",
+    drive: "~40 min / 28.7 mi",
+    reservations: "Trails free; donations appreciated. Trails dawn to dusk daily. Visitor center Mon-Fri 9 a.m.-4:30 p.m.",
+    unverified: true,
+    unverifiedReason: "Visitor-center hours on Friday Nov 27 (day after Thanksgiving) UNVERIFIED.",
+    notes: "Pairs with Dickens on Main. Dogs leashed. Picnic tables. No bicycles on trails.",
+    sources: [S.cibolo, S.dickens],
+  },
+  {
+    place: "Buc-ee's Katy, 27700 Katy Fwy",
+    drive: "~4 min / 2.1 mi from the Katy city point (start of the I-10 drive)",
+    reservations: "n/a. Official: 24 hours, 365 days.",
+    notes:
+      "Fuel and snacks before leaving Katy. BBQ sandwiches are meat. Vegetarian-aware snacks (beaver nuggets, chips, fudge, fruit cups); other kitchen items UNVERIFIED.",
+    sources: [S.buceesFaq, S.buceesLocations],
+  },
+  {
+    place: "Buc-ee's Luling, 10070 West IH 10",
+    drive: "On I-10: ~1 hr 55 min / 109.2 mi from Katy; ~2 hr 6 min / 109.0 mi onward to Flying L",
+    reservations: "n/a. Official: 24 hours, 365 days.",
+    notes:
+      "Via-Luling OSRM total Katy to Flying L is 4 hours 1 minute / 218.3 miles, about 4 minutes over the direct no-traffic path.",
+    sources: [S.buceesFaq, S.buceesLocations, S.osrm],
   },
   {
     place: "Bandera City Park / Medina River",
@@ -1158,8 +1417,10 @@ export const alerts: AlertItem[] = [
     id: "lowes-closed",
     tone: "warn",
     title: "Lowe's Market closed Thanksgiving",
-    body: "Officially closed Thanksgiving (also Easter and Christmas). Shop before arriving in Bandera.",
-    sources: [S.lowes],
+    body: "Officially closed Thanksgiving (also Easter and Christmas). Shop at an H-E-B in Katy before noon (chain-wide hours reported 6 a.m.-noon; UNVERIFIED for the specific store).",
+    unverified: true,
+    unverifiedReason: "H-E-B Thanksgiving hours UNVERIFIED for the specific Katy store.",
+    sources: [S.lowes, S.khou, S.fox4heb, S.heb],
   },
   {
     id: "hill-country-hunt",
@@ -1247,6 +1508,7 @@ export const callSheet = [
   { name: "TJ's", phone: "(830) 796-9990", tel: "tel:+18307969990", why: "Thanksgiving hours" },
   { name: "China Bowl", phone: "(830) 796-8494", tel: "tel:+18307968494", why: "Thanksgiving hours and broth" },
   { name: "OST", phone: "(830) 796-3836", tel: "tel:+18307963836", why: "Thanksgiving hours" },
+  { name: "Pap's Italian Grill", phone: "(830) 796-9400", tel: "tel:+18307969400", why: "Fri/Sat dinner; do not assume Thursday" },
 ];
 
 export const tpwdNote =

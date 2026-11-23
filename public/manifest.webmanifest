@@ -1,7 +1,7 @@
 {
   "name": "Bandera trip",
   "short_name": "Bandera",
-  "description": "Private Flying L Ranch / Bandera trip notes for Nov 26-29, 2026.",
+  "description": "Private trip notes for Nov 26-29, 2026.",
   "id": "/trip/",
   "start_url": "/trip/",
   "scope": "/trip/",

@@ -24,8 +24,7 @@ export const metadata: Metadata = {
     statusBarStyle: "default",
   },
   title: "Bandera trip · Nov 26-29, 2026",
-  description:
-    "Private Flying L Ranch / Bandera, TX trip notes for Nov 26-29, 2026. PIN required.",
+  description: "Private trip notes for Nov 26-29, 2026. PIN required.",
   alternates: {
     canonical: "/trip/",
   },

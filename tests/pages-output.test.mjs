@@ -17,6 +17,9 @@ test("static Pages export keeps the PIN shell free of itinerary content", async 
   assert.doesNotMatch(html, /Vegetarian Pasta/);
   assert.doesNotMatch(html, /Dickens on Main/);
   assert.doesNotMatch(html, /Menupix/);
+  assert.doesNotMatch(html, /Pap's Italian Grill/);
+  assert.doesNotMatch(html, /Flying L Dr/);
+  assert.doesNotMatch(html, /College Station/);
   assert.match(html, /Enter the trip PIN|trip PIN|4-digit PIN/);
   await assert.rejects(access(new URL("out/CNAME", root)));
   await assert.rejects(access(new URL("out/sitemap.xml", root)));

@@ -2,19 +2,17 @@
 
 Private, PIN-gated trip notes for **Thu Nov 26 to Sun Nov 29, 2026** at Flying L Ranch Resort, Bandera, TX. Served at `https://harsh.bet/trip/` with base path `/trip/`.
 
-The page is for the owner. It does not publish a personal name, home address, or personal email/phone.
+The page is for the owner. It does not publish a personal name, home address, or personal email/phone. City names only.
 
 ## What is on the page
 
 After the existing four-digit PIN gate:
 
-- Hero and an NWS weather strip (Bandera point forecast, timestamped Nov 23, 2026)
+- A day-by-day schedule (Thu, Fri, Sat, Sun) with time-ordered rows
+- Compact food, weather, alerts, and links sections under the days
+- Katy, TX start and end, I-10 west through San Antonio, OSRM no-traffic drive times
 - Diet callout: strict ovo-lacto vegetarian, no meat broths, ask about lard / fish sauce / Caesar, coconut flagged
-- Day-by-day itinerary with **confirm Thanksgiving hours** and **confirm check-in** chips
-- Top 5 food cards with named dishes and source links
 - Events for Nov 26-29 only
-- Drives table with OSRM times, reservation flags, and official links
-- Local alerts
 - An **as of Nov 23, 2026** note on hours and weather
 
 Hours, menus, prices, and times are never invented. Every fact keeps its source link. **UNVERIFIED** items stay visible. Prefer calling to confirm, especially Thanksgiving Day.
