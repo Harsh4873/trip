@@ -16,6 +16,52 @@ import type {
 } from "./bandera-content";
 
 type TabId = "schedule" | "food" | "attractions" | "events";
+type ScheduleSpan = "day" | "week";
+
+const SPAN_KEY = "trip-schedule-span";
+const TRIP_YMD: Record<string, string> = {
+  "2026-11-26": "thu",
+  "2026-11-27": "fri",
+  "2026-11-28": "sat",
+  "2026-11-29": "sun",
+};
+
+function chicagoYmd(now = new Date()): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Chicago",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(now);
+}
+
+function defaultScheduleSpan(now = new Date()): ScheduleSpan {
+  return TRIP_YMD[chicagoYmd(now)] ? "day" : "week";
+}
+
+function defaultDayId(fallback: string, now = new Date()): string {
+  return TRIP_YMD[chicagoYmd(now)] ?? fallback;
+}
+
+function readStoredSpan(): ScheduleSpan | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const stored = window.sessionStorage.getItem(SPAN_KEY);
+    if (stored === "day" || stored === "week") return stored;
+  } catch {
+    return null;
+  }
+  return null;
+}
+
+function writeStoredSpan(span: ScheduleSpan) {
+  if (typeof window === "undefined") return;
+  try {
+    window.sessionStorage.setItem(SPAN_KEY, span);
+  } catch {
+    /* ignore quota / private mode */
+  }
+}
 
 const TABS: { id: TabId; label: string }[] = [
   { id: "schedule", label: "Schedule" },
@@ -271,18 +317,27 @@ function BanderaView({ data }: { data: BanderaContent }) {
   );
 
   const [tab, setTab] = useState<TabId>("schedule");
-  const [dayId, setDayId] = useState(days[0]?.id ?? "thu");
-  const [mobile, setMobile] = useState(true);
+  const [dayId, setDayId] = useState(() => defaultDayId(days[0]?.id ?? "thu"));
+  const [phone, setPhone] = useState(() =>
+    typeof window !== "undefined" ? window.matchMedia("(max-width: 719px)").matches : true,
+  );
+  const [span, setSpan] = useState<ScheduleSpan>(() => readStoredSpan() ?? defaultScheduleSpan());
   const [open, setOpen] = useState<ItineraryItem | null>(null);
   const activeDay = days.find((day) => day.id === dayId) ?? days[0];
+  const scheduleMode: ScheduleSpan = phone ? "day" : span;
 
   useEffect(() => {
-    const mq = window.matchMedia("(max-width: 1099px)");
-    const sync = () => setMobile(mq.matches);
+    const mq = window.matchMedia("(max-width: 719px)");
+    const sync = () => setPhone(mq.matches);
     sync();
     mq.addEventListener("change", sync);
     return () => mq.removeEventListener("change", sync);
   }, []);
+
+  function chooseSpan(next: ScheduleSpan) {
+    setSpan(next);
+    writeStoredSpan(next);
+  }
 
   const groupedDrives = useMemo(() => {
     const groups: Record<DriveRow["group"], DriveRow[]> = {
@@ -320,21 +375,43 @@ function BanderaView({ data }: { data: BanderaContent }) {
             </button>
           ))}
         </nav>
-        {tab === "schedule" && mobile ? (
-          <div className="day-switcher" role="tablist" aria-label="Day">
-            {days.map((day) => (
-              <button
-                key={day.id}
-                type="button"
-                role="tab"
-                aria-selected={day.id === dayId}
-                className={day.id === dayId ? "is-active" : ""}
-                onClick={() => setDayId(day.id)}
-              >
-                {day.weekday}
-                <span>{day.short.replace(/^[A-Za-z]+ /, "")}</span>
-              </button>
-            ))}
+        {tab === "schedule" ? (
+          <div className="schedule-tools">
+            <div className="day-switcher" role="tablist" aria-label="Day">
+              {days.map((day) => (
+                <button
+                  key={day.id}
+                  type="button"
+                  role="tab"
+                  aria-selected={day.id === dayId}
+                  className={day.id === dayId ? "is-active" : ""}
+                  onClick={() => setDayId(day.id)}
+                >
+                  {day.weekday}
+                  <span>{day.short.replace(/^[A-Za-z]+ /, "")}</span>
+                </button>
+              ))}
+            </div>
+            {phone ? null : (
+              <div className="span-toggle" role="group" aria-label="Schedule span">
+                <button
+                  type="button"
+                  aria-pressed={span === "day"}
+                  className={span === "day" ? "is-active" : ""}
+                  onClick={() => chooseSpan("day")}
+                >
+                  Day
+                </button>
+                <button
+                  type="button"
+                  aria-pressed={span === "week"}
+                  className={span === "week" ? "is-active" : ""}
+                  onClick={() => chooseSpan("week")}
+                >
+                  4 days
+                </button>
+              </div>
+            )}
           </div>
         ) : null}
       </header>
@@ -342,7 +419,7 @@ function BanderaView({ data }: { data: BanderaContent }) {
       <main id="tab-panel">
         {tab === "schedule" ? (
           <div className="schedule-tab">
-            {mobile && activeDay ? (
+            {scheduleMode === "day" && activeDay ? (
               <p className="day-wx">
                 {activeDay.date}: {activeDay.weather.sky}, {activeDay.weather.high}
                 {activeDay.weather.low ? ` / ${activeDay.weather.low}` : ""}
@@ -361,7 +438,9 @@ function BanderaView({ data }: { data: BanderaContent }) {
             <CalendarGrid
               days={days}
               activeDayId={dayId}
-              mobile={mobile}
+              mode={scheduleMode}
+              rich={scheduleMode === "day" && !phone}
+              onSelectDay={setDayId}
               onOpen={(item, id) => {
                 setDayId(id);
                 setOpen(item);

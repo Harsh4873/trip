@@ -116,13 +116,28 @@ function HourRail() {
   );
 }
 
+function blockFaceTitle(item: ItineraryItem, rich: boolean): string {
+  const isOptions = Boolean(item.options?.length);
+  if (rich) return item.title;
+  if (isOptions) return `Options: ${item.shortTitle.replace(/\s+options$/i, "")}`;
+  return item.shortTitle;
+}
+
+function blockFaceDetail(item: ItineraryItem): string {
+  const optionNames = item.options?.map((option) => option.shortTitle).filter(Boolean) ?? [];
+  if (optionNames.length) return optionNames.join(" · ");
+  return item.hoursNote || item.address || item.body;
+}
+
 function DayCanvas({
   day,
   maxCols,
+  rich,
   onOpen,
 }: {
   day: DayPlan;
   maxCols: number;
+  rich: boolean;
   onOpen: (item: ItineraryItem) => void;
 }) {
   const laid = useMemo(() => layoutItems(day.items, maxCols), [day.items, maxCols]);
@@ -143,6 +158,7 @@ function DayCanvas({
         const width = `calc((100% - 6px) / ${slot.cols})`;
         const left = `calc(${slot.col} * (100% - 6px) / ${slot.cols} + 3px)`;
         const isOptions = Boolean(slot.item.options?.length);
+        const detail = rich ? blockFaceDetail(slot.item) : "";
         return (
           <button
             key={slot.item.id}
@@ -152,10 +168,9 @@ function DayCanvas({
             onClick={() => onOpen(slot.item)}
           >
             <span className="cal-block-time">{formatRange(slot.item)}</span>
-            <span className="cal-block-title">
-              {isOptions
-                ? `Options: ${slot.item.shortTitle.replace(/\s+options$/i, "")}`
-                : slot.item.shortTitle}
+            <span className="cal-block-copy">
+              <span className="cal-block-title">{blockFaceTitle(slot.item, rich)}</span>
+              {detail ? <span className="cal-block-detail">{detail}</span> : null}
             </span>
           </button>
         );
@@ -179,36 +194,54 @@ export function CalendarLegend() {
 export function CalendarGrid({
   days,
   activeDayId,
-  mobile,
+  mode,
+  rich,
   onOpen,
+  onSelectDay,
 }: {
   days: DayPlan[];
   activeDayId: string;
-  mobile: boolean;
+  mode: "day" | "week";
+  rich?: boolean;
   onOpen: (item: ItineraryItem, dayId: string) => void;
+  onSelectDay?: (dayId: string) => void;
 }) {
-  const visible = mobile ? days.filter((day) => day.id === activeDayId) : days;
+  const visible = mode === "day" ? days.filter((day) => day.id === activeDayId) : days;
   const height = ((CAL_END_MIN - CAL_START_MIN) / 60) * PX_PER_HOUR;
-  const maxCols = mobile ? 2 : 2;
+  const showDetail = Boolean(rich);
 
   return (
-    <div className={`cal-grid ${mobile ? "is-mobile" : "is-desktop"}`}>
-      {!mobile ? (
+    <div className={`cal-grid is-${mode}${showDetail ? " is-rich" : ""}`}>
+      {mode === "week" ? (
         <div className="cal-week-head">
           <span />
           {days.map((day) => (
-            <div key={day.id} className="cal-week-label">
+            <button
+              key={day.id}
+              type="button"
+              className={`cal-week-label${day.id === activeDayId ? " is-active" : ""}`}
+              onClick={() => onSelectDay?.(day.id)}
+            >
               <strong>{day.weekday}</strong>
               <span>{day.short}</span>
-            </div>
+            </button>
           ))}
         </div>
       ) : null}
       <div className="cal-week-body" style={{ minHeight: height }}>
         <HourRail />
         {visible.map((day) => (
-          <section key={day.id} className="cal-day" aria-label={day.date}>
-            <DayCanvas day={day} maxCols={maxCols} onOpen={(item) => onOpen(item, day.id)} />
+          <section
+            key={day.id}
+            className={`cal-day${day.id === activeDayId ? " is-active" : ""}`}
+            aria-label={day.date}
+          >
+            <DayCanvas
+              day={day}
+              maxCols={2}
+              rich={showDetail}
+              onOpen={(item) => onOpen(item, day.id)}
+            />
           </section>
         ))}
       </div>

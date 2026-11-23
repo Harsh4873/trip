@@ -174,6 +174,13 @@ test("renders sticky tabs and a calendar time-grid without filter chips", async 
   assert.match(planner, /Events/);
   assert.match(planner, /tab-bar/);
   assert.match(planner, /day-switcher/);
+  assert.match(planner, /span-toggle/);
+  assert.match(planner, /chooseSpan\("day"\)/);
+  assert.match(planner, /4 days/);
+  assert.match(planner, /trip-schedule-span/);
+  assert.match(planner, /America\/Chicago/);
+  assert.match(planner, /2026-11-26/);
+  assert.match(planner, /2026-11-29/);
   assert.match(calendar, /cal-block/);
   assert.match(calendar, /cal-grid/);
   assert.match(data, /kind: "drive"/);
@@ -187,6 +194,8 @@ test("renders sticky tabs and a calendar time-grid without filter chips", async 
   assert.match(data, /shortTitle: "Return options"/);
   assert.match(calendar, /Options: /);
   assert.match(calendar, /MIN_BLOCK_PX = 48/);
+  assert.match(calendar, /mode: "day" \| "week"/);
+  assert.match(calendar, /cal-block-detail/);
   assert.doesNotMatch(planner, /chip-row|Chips /);
   assert.doesNotMatch(planner, /jump-nav/);
   assert.doesNotMatch(planner, /day-row/);
