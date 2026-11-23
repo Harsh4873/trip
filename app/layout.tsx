@@ -2,17 +2,15 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
 export const viewport: Viewport = {
-  // cover + safe-area insets keep the standalone (installed) app edge-to-edge.
   viewportFit: "cover",
   themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#1c5138" },
-    { media: "(prefers-color-scheme: dark)", color: "#12321f" },
+    { media: "(prefers-color-scheme: light)", color: "#3d4f36" },
+    { media: "(prefers-color-scheme: dark)", color: "#1d281c" },
   ],
 };
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://harsh.bet"),
-  // Installable app shell: paths are absolute under the production /trip base.
   manifest: "/trip/manifest.webmanifest",
   icons: {
     icon: [
@@ -21,15 +19,13 @@ export const metadata: Metadata = {
     ],
     apple: "/trip/apple-touch-icon.png",
   },
-  // The manifest's display:standalone replaces the deprecated
-  // apple-mobile-web-app-capable tag (iOS honors the manifest since 16.4).
   appleWebApp: {
-    title: "Roadbook",
+    title: "Bandera trip",
     statusBarStyle: "default",
   },
-  title: "New Mexico Road Trip · Aug 8–15, 2026",
+  title: "Bandera trip · Nov 26-29, 2026",
   description:
-    "Day-by-day schedule, a vegetarian food and attraction lookup, and shared checklists for the Aug 8–15, 2026 drive through Taos, Santa Fe, Albuquerque, and Palo Duro.",
+    "Private Flying L Ranch / Bandera, TX trip notes for Nov 26-29, 2026. PIN required.",
   alternates: {
     canonical: "/trip/",
   },
@@ -44,10 +40,10 @@ export const metadata: Metadata = {
     },
   },
   openGraph: {
-    title: "New Mexico Road Trip · 2026",
-    description: "Eight days across Taos, Santa Fe, Albuquerque, and Palo Duro.",
+    title: "Bandera trip · Nov 26-29, 2026",
+    description: "Private trip planner. PIN required.",
     url: "https://harsh.bet/trip/",
-    siteName: "New Mexico Road Trip",
+    siteName: "Bandera trip",
     type: "website",
   },
 };
@@ -59,6 +55,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
+      <head>
+        <meta name="robots" content="noindex,nofollow" />
+      </head>
       <body>{children}</body>
     </html>
   );

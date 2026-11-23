@@ -58,18 +58,18 @@ export default function PinGate() {
     <main className="access-page">
       <div className="access-backdrop" aria-hidden="true">
         <div className="access-backdrop-bar">
-          <span className="access-backdrop-logo">NM</span>
+          <span className="access-backdrop-logo">TX</span>
           <span />
         </div>
         <div className="access-backdrop-hero">
           <div>
-            <span />
+            <span className="access-backdrop-kicker" />
             <strong />
             <strong />
             <small />
             <small />
           </div>
-          <div className="access-backdrop-map">
+          <div className="access-backdrop-map access-backdrop-ranch">
             <i />
             <i />
             <i />
@@ -87,7 +87,7 @@ export default function PinGate() {
         <div className="access-brand">
           <span className="access-brand-mark"><MapPinned aria-hidden="true" /></span>
           <span>
-            <strong>New Mexico Roadbook</strong>
+            <strong>Bandera roadbook</strong>
             <small>Private trip planner</small>
           </span>
         </div>
