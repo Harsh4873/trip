@@ -162,15 +162,68 @@ test("keeps source-linked food cards, OSRM drives, and local alerts", async () =
   assert.match(data, /Buc-ee's Luling/);
 });
 
-test("renders a simple day-by-day schedule without filter chips", async () => {
-  const planner = await read("app/TripPlanner.tsx");
-  assert.match(planner, /day-card/);
-  assert.match(planner, /day-row/);
-  assert.match(planner, /id="food"/);
-  assert.match(planner, /id="weather"/);
-  assert.match(planner, /id="alerts"/);
-  assert.match(planner, /id="links"/);
+test("renders sticky tabs and a calendar time-grid without filter chips", async () => {
+  const [planner, calendar, data] = await Promise.all([
+    read("app/TripPlanner.tsx"),
+    read("app/CalendarGrid.tsx"),
+    read("app/bandera-content.ts"),
+  ]);
+  assert.match(planner, /Schedule/);
+  assert.match(planner, /Food/);
+  assert.match(planner, /Attractions/);
+  assert.match(planner, /Events/);
+  assert.match(planner, /tab-bar/);
+  assert.match(planner, /day-switcher/);
+  assert.match(planner, /span-toggle/);
+  assert.match(planner, /chooseSpan\("day"\)/);
+  assert.match(planner, /4 days/);
+  assert.match(planner, /trip-schedule-span/);
+  assert.match(planner, /America\/Chicago/);
+  assert.match(planner, /2026-11-26/);
+  assert.match(planner, /2026-11-29/);
+  assert.match(calendar, /cal-block/);
+  assert.match(calendar, /cal-grid/);
+  assert.match(data, /kind: "drive"/);
+  assert.match(data, /id: "thu-heb"/);
+  assert.match(data, /startMin: 495/);
+  assert.match(data, /shortTitle: "H-E-B in Katy"/);
+  assert.match(data, /hoursNote:/);
+  assert.match(data, /shortTitle: "Hike options"/);
+  assert.match(data, /shortTitle: "Day options"/);
+  assert.match(data, /shortTitle: "Music options"/);
+  assert.match(data, /shortTitle: "Return options"/);
+  assert.match(calendar, /Options: /);
+  assert.match(calendar, /MIN_BLOCK_PX = 48/);
+  assert.match(calendar, /mode: "day" \| "week"/);
+  assert.match(calendar, /cal-block-detail/);
   assert.doesNotMatch(planner, /chip-row|Chips /);
+  assert.doesNotMatch(planner, /jump-nav/);
+  assert.doesNotMatch(planner, /day-row/);
+});
+
+test("keeps reusable Wikimedia photos on disk with credits and lists photo gaps", async () => {
+  const data = await read("app/bandera-content.ts");
+  assert.match(data, /\/images\/downtown-bandera\.webp/);
+  assert.match(data, /\/images\/frontier-times\.webp/);
+  assert.match(data, /\/images\/hill-country-sna\.webp/);
+  assert.match(data, /\/images\/lost-maples\.webp/);
+  assert.match(data, /\/images\/medina-river\.webp/);
+  assert.match(data, /\/images\/ost\.webp/);
+  assert.match(data, /\/images\/bucees-luling\.webp/);
+  assert.match(data, /\/images\/river-walk\.webp/);
+  assert.match(data, /\/images\/cave\.webp/);
+  assert.match(data, /\/images\/boerne-main\.webp/);
+  assert.match(data, /Larry D\. Moore/);
+  assert.match(data, /CC BY 4\.0/);
+  assert.match(data, /Billy Hathorn/);
+  assert.match(data, /CC BY-SA 3\.0/);
+  assert.match(data, /Stewart Tomlinson/);
+  assert.match(data, /Pap's Italian Grill/);
+  assert.match(data, /Flying L Ranch Resort \(no reusable photo found/);
+  assert.match(data, /Cibolo Nature Center/);
+  await access(new URL("public/images/downtown-bandera.webp", root));
+  await access(new URL("public/images/frontier-times.webp", root));
+  await access(new URL("public/images/bucees-luling.webp", root));
 });
 
 test("does not put the owner's name or personal contact on the page", async () => {

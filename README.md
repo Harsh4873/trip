@@ -8,8 +8,10 @@ The page is for the owner. It does not publish a personal name, home address, or
 
 After the existing four-digit PIN gate:
 
-- A day-by-day schedule (Thu, Fri, Sat, Sun) with time-ordered rows
-- Compact food, weather, alerts, and links sections under the days
+- Sticky tabs: Schedule, Food, Attractions, Events
+- A calendar time-grid (hour rail and duration blocks). One day at a time on a phone, four days on a wide screen
+- Food, attractions, and events cards with reusable Wikimedia Commons photos where a legal photo exists
+- Weather, alerts, drive info, and stay notes inside Schedule
 - Katy, TX start and end, I-10 west through San Antonio, OSRM no-traffic drive times
 - Diet callout: strict ovo-lacto vegetarian, no meat broths, ask about lard / fish sauce / Caesar, coconut flagged
 - Events for Nov 26-29 only
