@@ -177,7 +177,16 @@ test("renders sticky tabs and a calendar time-grid without filter chips", async 
   assert.match(calendar, /cal-block/);
   assert.match(calendar, /cal-grid/);
   assert.match(data, /kind: "drive"/);
-  assert.match(data, /startMin: 360/);
+  assert.match(data, /id: "thu-heb"/);
+  assert.match(data, /startMin: 495/);
+  assert.match(data, /shortTitle: "H-E-B in Katy"/);
+  assert.match(data, /hoursNote:/);
+  assert.match(data, /shortTitle: "Hike options"/);
+  assert.match(data, /shortTitle: "Day options"/);
+  assert.match(data, /shortTitle: "Music options"/);
+  assert.match(data, /shortTitle: "Return options"/);
+  assert.match(calendar, /Options: /);
+  assert.match(calendar, /MIN_BLOCK_PX = 48/);
   assert.doesNotMatch(planner, /chip-row|Chips /);
   assert.doesNotMatch(planner, /jump-nav/);
   assert.doesNotMatch(planner, /day-row/);

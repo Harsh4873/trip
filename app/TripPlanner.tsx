@@ -157,14 +157,30 @@ function BlockSheet({
         <div className="sheet-kicker">
           <KindTag kind={item.kind} />
           <span>{formatRange(item)}</span>
+          {item.options?.length ? <span className="optional-flag">Options</span> : null}
           {item.optional ? <span className="optional-flag">Optional</span> : null}
         </div>
         <h2 id="sheet-title">{item.title}</h2>
         {item.unverified ? <Unverified reason={item.unverifiedReason} /> : null}
         {item.address ? <p className="muted">{item.address}</p> : null}
+        {item.hoursNote ? <p className="window-note">{item.hoursNote}</p> : null}
         {item.windowNote ? <p className="window-note">{item.windowNote}</p> : null}
         <p>{item.body}</p>
         {item.callToConfirm ? <p className="call-line">{item.callToConfirm}</p> : null}
+        {item.options?.length ? (
+          <div className="option-list">
+            {item.options.map((option) => (
+              <article key={option.id} className="option-card">
+                <h3>{option.title}</h3>
+                <p className="muted">{option.time}</p>
+                {option.unverified ? <Unverified reason={option.unverifiedReason} /> : null}
+                {option.hoursNote ? <p className="window-note">{option.hoursNote}</p> : null}
+                <p>{option.body}</p>
+                <Sources links={option.sources} />
+              </article>
+            ))}
+          </div>
+        ) : null}
         <Sources links={item.sources} />
       </div>
     </div>
