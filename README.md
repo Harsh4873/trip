@@ -9,7 +9,7 @@ The page is for the owner. It does not publish a personal name, home address, or
 
 ## What is on the page
 
-After the four-digit PIN gate (either code in `app/PinGate.tsx`):
+After the four-digit PIN gate (each trip has its own code in `app/PinGate.tsx`):
 
 - Each trip has its own PIN; a PIN opens only that trip
 - Sticky tabs: Schedule, Food, Attractions, Events

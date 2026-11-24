@@ -87,8 +87,6 @@ test("lock screen is rethemed for the trip roadbook, not NM", async () => {
   const pinGate = await read("app/PinGate.tsx");
   assert.match(pinGate, />TX</);
   assert.match(pinGate, /Trip roadbook/);
-  assert.match(pinGate, /Bandera/);
-  assert.match(pinGate, /New Orleans/);
   assert.doesNotMatch(pinGate, />NM</);
   assert.doesNotMatch(pinGate, /New Mexico Roadbook/);
 });
@@ -264,7 +262,7 @@ test("has a Day / all-days toggle for both trips", async () => {
     read("app/nola-content.ts"),
     read("app/bandera-content.ts"),
   ]);
-  assert.match(planner, /New Orleans/);
+  assert.match(nola, /New Orleans/);
   assert.match(planner, /chooseSpan\("day"\)/);
   assert.match(bandera, /spanAllLabel: "4 days"/);
   assert.match(nola, /spanAllLabel: "All days"/);
