@@ -5,115 +5,27 @@
  * Do not invent hours, menus, prices, or times.
  */
 
-export type SourceLink = {
-  href: string;
-  label: string;
-};
-
-export type Dish = {
-  name: string;
-  detail: string;
-  unverified?: boolean;
-  unverifiedReason?: string;
-  skip?: boolean;
-  skipReason?: string;
-};
-
-export type FoodCard = {
-  rank: number;
-  name: string;
-  blurb: string;
-  address: string;
-  phone?: string;
-  hours: string;
-  hoursUnverified?: boolean;
-  dishes: Dish[];
-  ask: string[];
-  sources: SourceLink[];
-  notes?: string[];
-  imageId?: string;
-};
-
-export type BlockKind = "drive" | "food" | "activity" | "event" | "rest";
-
-export type ItineraryItem = {
-  id: string;
-  time: string;
-  title: string;
-  shortTitle: string;
-  body: string;
-  kind: BlockKind;
-  startMin: number;
-  endMin: number;
-  windowNote?: string;
-  hoursNote?: string;
-  optional?: boolean;
-  imageId?: string;
-  address?: string;
-  unverified?: boolean;
-  unverifiedReason?: string;
-  callToConfirm?: string;
-  sources: SourceLink[];
-  options?: ItineraryItem[];
-};
-
-export type DayPlan = {
-  id: string;
-  date: string;
-  weekday: string;
-  short: string;
-  title: string;
-  weather: { high: string; low?: string; sky: string };
-  items: ItineraryItem[];
-};
-
-export type TripEvent = {
-  id: string;
-  when: string;
-  dates: string[];
-  title: string;
-  where: string;
-  detail: string;
-  unverified?: boolean;
-  unverifiedReason?: string;
-  sources: SourceLink[];
-  imageId?: string;
-};
-
-export type DriveRow = {
-  id: string;
-  place: string;
-  drive: string;
-  reservations: string;
-  reserve?: boolean;
-  unverified?: boolean;
-  unverifiedReason?: string;
-  notes: string;
-  sources: SourceLink[];
-  imageId?: string;
-  group: "in-town" | "nearby" | "i10" | "longer";
-};
-
-export type PlacePhoto = {
-  id: string;
-  src: string;
-  alt: string;
-  credit: string;
-  license: string;
-  licenseHref: string;
-  commonsHref: string;
-  note: string;
-};
-
-export type AlertItem = {
-  id: string;
-  tone: "warn" | "info";
-  title: string;
-  body: string;
-  unverified?: boolean;
-  unverifiedReason?: string;
-  sources: SourceLink[];
-};
+export type {
+  AlertItem,
+  BlockKind,
+  DayPlan,
+  Dish,
+  DriveRow,
+  FoodCard,
+  ItineraryItem,
+  PlacePhoto,
+  SourceLink,
+  TripEvent,
+} from "./trip-types";
+import type {
+  AlertItem,
+  DayPlan,
+  DriveRow,
+  FoodCard,
+  PlacePhoto,
+  SourceLink,
+  TripEvent,
+} from "./trip-types";
 
 export const S = {
   flyingl: { href: "https://flyingl.com/", label: "flyingl.com" },
@@ -471,6 +383,7 @@ const PLANNING =
   "Suggested planning window, not a confirmed reservation or guaranteed clock time.";
 
 export const meta = {
+  tripId: "bandera" as const,
   title: "Flying L Ranch · Bandera, TX",
   dates: "Thu Nov 26 to Sun Nov 29, 2026",
   timezone: "America/Chicago",
@@ -482,6 +395,24 @@ export const meta = {
   stayPhone: "(830) 796-7745",
   stayPhoneTel: "tel:+18307967745",
   originCity: "Katy, TX",
+  spanAllLabel: "4 days",
+  mapsOutboundLabel: "Maps: Katy to Flying L",
+  mapsReturnLabel: "Maps: Flying L to Katy",
+  foodLead:
+    "Strict ovo-lacto. Named dishes come from the linked menus. Call to confirm Thanksgiving hours. Never assume a kitchen is open.",
+  attractionsLead:
+    "Real places only. Drives are OSRM no-traffic from Flying L unless noted. Photos are Wikimedia Commons files that allow reuse; places without a reusable photo use a placeholder.",
+  eventsLead: "Only Nov 26–29, 2026. Later parades stay in the “after this trip” note.",
+  stayFoldTitle: "Flying L notes",
+  hoursWarning: "Call to confirm these hours, especially Thanksgiving.",
+  driveAssumption:
+    "Starts and ends in Katy, TX. I-10 west through San Antonio, then Loop 1604 and TX-16/173 to the ranch.",
+  groupLabels: {
+    "in-town": "In and around Bandera",
+    nearby: "Short drives",
+    i10: "On the I-10 drive",
+    longer: "Longer side trips",
+  },
 };
 
 export const resort = {
@@ -2087,6 +2018,7 @@ export const content = {
   tpwdNote,
   photos,
   photoGaps,
+  foldNotes: [] as { title: string; body: string }[],
   sources: SOURCE_CATALOG,
 };
 

@@ -20,11 +20,11 @@ export const metadata: Metadata = {
     apple: "/trip/apple-touch-icon.png",
   },
   appleWebApp: {
-    title: "Bandera trip",
+    title: "Trip roadbook",
     statusBarStyle: "default",
   },
-  title: "Bandera trip · Nov 26-29, 2026",
-  description: "Private trip notes for Nov 26-29, 2026. PIN required.",
+  title: "Trip roadbook · PIN required",
+  description: "Private trip notes. PIN required.",
   alternates: {
     canonical: "/trip/",
   },
@@ -39,10 +39,10 @@ export const metadata: Metadata = {
     },
   },
   openGraph: {
-    title: "Bandera trip · Nov 26-29, 2026",
+    title: "Trip roadbook · PIN required",
     description: "Private trip planner. PIN required.",
     url: "https://harsh.bet/trip/",
-    siteName: "Bandera trip",
+    siteName: "Trip roadbook",
     type: "website",
   },
 };

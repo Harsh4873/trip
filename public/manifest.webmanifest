@@ -1,7 +1,7 @@
 {
-  "name": "Bandera trip",
-  "short_name": "Bandera",
-  "description": "Private trip notes for Nov 26-29, 2026.",
+  "name": "Trip roadbook",
+  "short_name": "Trip",
+  "description": "Private trip notes. PIN required.",
   "id": "/trip/",
   "start_url": "/trip/",
   "scope": "/trip/",

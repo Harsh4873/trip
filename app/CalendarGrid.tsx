@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
-import type { DayPlan, ItineraryItem } from "./bandera-content";
+import type { DayPlan, ItineraryItem } from "./trip-types";
 
 export const CAL_START_MIN = 6 * 60;
 export const CAL_END_MIN = 25 * 60;
@@ -211,7 +211,10 @@ export function CalendarGrid({
   const showDetail = Boolean(rich);
 
   return (
-    <div className={`cal-grid is-${mode}${showDetail ? " is-rich" : ""}`}>
+    <div
+      className={`cal-grid is-${mode}${showDetail ? " is-rich" : ""}`}
+      style={{ ["--cal-days" as string]: String(days.length) }}
+    >
       {mode === "week" ? (
         <div className="cal-week-head">
           <span />
