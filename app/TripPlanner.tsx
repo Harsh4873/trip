@@ -4,27 +4,42 @@ import { CameraOff, ExternalLink, Phone, X } from "lucide-react";
 import Image from "next/image";
 import { useEffect, useMemo, useState } from "react";
 import { CalendarGrid, CalendarLegend, formatRange } from "./CalendarGrid";
+import type { BanderaContent } from "./bandera-content";
+import type { NolaContent } from "./nola-content";
 import type {
-  BanderaContent,
   BlockKind,
+  DriveGroup,
   DriveRow,
+  FoldNote,
   FoodCard,
   ItineraryItem,
   PlacePhoto,
   SourceLink,
+  TripContent,
   TripEvent,
-} from "./bandera-content";
+  TripId,
+} from "./trip-types";
 
 type TabId = "schedule" | "food" | "attractions" | "events";
 type ScheduleSpan = "day" | "week";
+type PlannerData = BanderaContent | NolaContent;
 
 const SPAN_KEY = "trip-schedule-span";
-const TRIP_YMD: Record<string, string> = {
+const TRIP_KEY = "trip-roadbook-selected";
+const BANDERA_YMD: Record<string, string> = {
   "2026-11-26": "thu",
   "2026-11-27": "fri",
   "2026-11-28": "sat",
   "2026-11-29": "sun",
 };
+const NOLA_YMD: Record<string, string> = {
+  "2026-12-25": "thu",
+  "2026-12-26": "fri",
+};
+
+function ymdMapFor(tripId: TripId): Record<string, string> {
+  return tripId === "nola" ? NOLA_YMD : BANDERA_YMD;
+}
 
 function chicagoYmd(now = new Date()): string {
   return new Intl.DateTimeFormat("en-CA", {
@@ -35,12 +50,39 @@ function chicagoYmd(now = new Date()): string {
   }).format(now);
 }
 
-function defaultScheduleSpan(now = new Date()): ScheduleSpan {
-  return TRIP_YMD[chicagoYmd(now)] ? "day" : "week";
+function defaultScheduleSpan(tripId: TripId, now = new Date()): ScheduleSpan {
+  return ymdMapFor(tripId)[chicagoYmd(now)] ? "day" : "week";
 }
 
-function defaultDayId(fallback: string, now = new Date()): string {
-  return TRIP_YMD[chicagoYmd(now)] ?? fallback;
+function defaultDayId(tripId: TripId, fallback: string, now = new Date()): string {
+  return ymdMapFor(tripId)[chicagoYmd(now)] ?? fallback;
+}
+
+function defaultTripId(now = new Date()): TripId {
+  const ymd = chicagoYmd(now);
+  if (NOLA_YMD[ymd]) return "nola";
+  if (BANDERA_YMD[ymd]) return "bandera";
+  return "bandera";
+}
+
+function readStoredTrip(): TripId | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const stored = window.sessionStorage.getItem(TRIP_KEY);
+    if (stored === "bandera" || stored === "nola") return stored;
+  } catch {
+    return null;
+  }
+  return null;
+}
+
+function writeStoredTrip(tripId: TripId) {
+  if (typeof window === "undefined") return;
+  try {
+    window.sessionStorage.setItem(TRIP_KEY, tripId);
+  } catch {
+    /* ignore quota / private mode */
+  }
 }
 
 function readStoredSpan(): ScheduleSpan | null {
@@ -69,13 +111,6 @@ const TABS: { id: TabId; label: string }[] = [
   { id: "attractions", label: "Attractions" },
   { id: "events", label: "Events" },
 ];
-
-const GROUP_LABEL: Record<DriveRow["group"], string> = {
-  "in-town": "In and around Bandera",
-  nearby: "Short drives",
-  i10: "On the I-10 drive",
-  longer: "Longer side trips",
-};
 
 function Sources({ links }: { links: SourceLink[] }) {
   if (!links.length) return null;
@@ -233,7 +268,15 @@ function BlockSheet({
   );
 }
 
-function FoodBlock({ card, photo }: { card: FoodCard; photo?: PlacePhoto }) {
+function FoodBlock({
+  card,
+  photo,
+  hoursWarning,
+}: {
+  card: FoodCard;
+  photo?: PlacePhoto;
+  hoursWarning: string;
+}) {
   const tel = card.phone?.replace(/[^\d+]/g, "");
   return (
     <article className="media-card">
@@ -249,9 +292,7 @@ function FoodBlock({ card, photo }: { card: FoodCard; photo?: PlacePhoto }) {
           </a>
         ) : null}
         <p className="hours-line">{card.hours}</p>
-        {card.hoursUnverified ? (
-          <Unverified reason="Call to confirm these hours, especially Thanksgiving." />
-        ) : null}
+        {card.hoursUnverified ? <Unverified reason={hoursWarning} /> : null}
         {card.dishes.length ? (
           <ul className="dish-list">
             {card.dishes.map((dish) => (
@@ -309,19 +350,32 @@ function EventCard({ event, photo }: { event: TripEvent; photo?: PlacePhoto }) {
   );
 }
 
-function BanderaView({ data }: { data: BanderaContent }) {
+function TripView({
+  data,
+  tripId,
+  onTripId,
+}: {
+  data: TripContent;
+  tripId: TripId;
+  onTripId: (id: TripId) => void;
+}) {
   const { meta, weather, diet, days, foodPicks, events, drives, alerts, photos, photoGaps } = data;
   const photoMap = useMemo(
     () => Object.fromEntries(photos.map((photo) => [photo.id, photo])),
     [photos],
   );
+  const groupLabels = meta.groupLabels;
+  const bandera = tripId === "bandera" && "resort" in data ? (data as BanderaContent) : null;
+  const nola = tripId === "nola" ? (data as NolaContent) : null;
 
   const [tab, setTab] = useState<TabId>("schedule");
-  const [dayId, setDayId] = useState(() => defaultDayId(days[0]?.id ?? "thu"));
+  const [dayId, setDayId] = useState(() => defaultDayId(tripId, days[0]?.id ?? "thu"));
   const [phone, setPhone] = useState(() =>
     typeof window !== "undefined" ? window.matchMedia("(max-width: 719px)").matches : true,
   );
-  const [span, setSpan] = useState<ScheduleSpan>(() => readStoredSpan() ?? defaultScheduleSpan());
+  const [span, setSpan] = useState<ScheduleSpan>(
+    () => readStoredSpan() ?? defaultScheduleSpan(tripId),
+  );
   const [open, setOpen] = useState<ItineraryItem | null>(null);
   const activeDay = days.find((day) => day.id === dayId) ?? days[0];
   const scheduleMode: ScheduleSpan = phone ? "day" : span;
@@ -340,7 +394,7 @@ function BanderaView({ data }: { data: BanderaContent }) {
   }
 
   const groupedDrives = useMemo(() => {
-    const groups: Record<DriveRow["group"], DriveRow[]> = {
+    const groups: Record<DriveGroup, DriveRow[]> = {
       "in-town": [],
       nearby: [],
       i10: [],
@@ -357,6 +411,26 @@ function BanderaView({ data }: { data: BanderaContent }) {
       </a>
 
       <header className="chrome">
+        <div className="trip-switcher" role="tablist" aria-label="Trip">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={tripId === "bandera"}
+            className={tripId === "bandera" ? "is-active" : ""}
+            onClick={() => onTripId("bandera")}
+          >
+            Bandera
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={tripId === "nola"}
+            className={tripId === "nola" ? "is-active" : ""}
+            onClick={() => onTripId("nola")}
+          >
+            New Orleans
+          </button>
+        </div>
         <div className="brand">
           <strong>{meta.stayName}</strong>
           <span>{meta.dates}</span>
@@ -377,7 +451,12 @@ function BanderaView({ data }: { data: BanderaContent }) {
         </nav>
         {tab === "schedule" ? (
           <div className="schedule-tools">
-            <div className="day-switcher" role="tablist" aria-label="Day">
+            <div
+              className="day-switcher"
+              role="tablist"
+              aria-label="Day"
+              style={{ ["--day-count" as string]: String(days.length) }}
+            >
               {days.map((day) => (
                 <button
                   key={day.id}
@@ -408,7 +487,7 @@ function BanderaView({ data }: { data: BanderaContent }) {
                   className={span === "week" ? "is-active" : ""}
                   onClick={() => chooseSpan("week")}
                 >
-                  4 days
+                  {meta.spanAllLabel}
                 </button>
               </div>
             )}
@@ -458,7 +537,7 @@ function BanderaView({ data }: { data: BanderaContent }) {
                   target="_blank"
                   rel="noopener noreferrer"
                 >
-                  Maps: Katy to Flying L
+                  {meta.mapsOutboundLabel}
                 </a>
                 <a
                   className="btn-link btn-link-quiet"
@@ -466,7 +545,7 @@ function BanderaView({ data }: { data: BanderaContent }) {
                   target="_blank"
                   rel="noopener noreferrer"
                 >
-                  Maps: Flying L to Katy
+                  {meta.mapsReturnLabel}
                 </a>
               </div>
               <p className="as-of">
@@ -492,7 +571,7 @@ function BanderaView({ data }: { data: BanderaContent }) {
                   </li>
                 ))}
               </ul>
-              <p>{weather.freezeWarning}</p>
+              {weather.freezeWarning ? <p>{weather.freezeWarning}</p> : null}
               <p>{weather.takeaway}</p>
               <Sources links={weather.sources} />
               {alerts.map((alert) => (
@@ -503,27 +582,51 @@ function BanderaView({ data }: { data: BanderaContent }) {
                   <Sources links={alert.sources} />
                 </article>
               ))}
-              <h3>Flying L notes</h3>
-              <p>{data.resort.hours}</p>
-              <p>{data.resort.checkIn.summary}</p>
-              <Unverified reason={data.resort.checkIn.unverifiedReason} />
-              <Sources links={data.resort.checkIn.sources} />
-              <p>
-                {data.resort.pool.summary} {data.resort.pool.note}
-              </p>
-              <p>{data.resort.activities.summary}</p>
-              <Unverified reason={data.resort.activities.unverifiedReason} />
-              <p>{data.resort.dining.summary}</p>
-              <Unverified reason={data.resort.dining.unverifiedReason} />
-              <p>{data.resort.otaAddressNote}</p>
-              <p>{data.tpwdNote}</p>
-              <h3>{data.afterThisTrip.title}</h3>
-              {data.afterThisTrip.items.map((item) => (
-                <div key={item.text}>
-                  <p>{item.text}</p>
-                  <Sources links={item.sources} />
+              <h3>{meta.stayFoldTitle}</h3>
+              {bandera ? (
+                <>
+                  <p>{bandera.resort.hours}</p>
+                  <p>{bandera.resort.checkIn.summary}</p>
+                  <Unverified reason={bandera.resort.checkIn.unverifiedReason} />
+                  <Sources links={bandera.resort.checkIn.sources} />
+                  <p>
+                    {bandera.resort.pool.summary} {bandera.resort.pool.note}
+                  </p>
+                  <p>{bandera.resort.activities.summary}</p>
+                  <Unverified reason={bandera.resort.activities.unverifiedReason} />
+                  <p>{bandera.resort.dining.summary}</p>
+                  <Unverified reason={bandera.resort.dining.unverifiedReason} />
+                  <p>{bandera.resort.otaAddressNote}</p>
+                  <p>{bandera.tpwdNote}</p>
+                  <h3>{bandera.afterThisTrip.title}</h3>
+                  {bandera.afterThisTrip.items.map((item) => (
+                    <div key={item.text}>
+                      <p>{item.text}</p>
+                      <Sources links={item.sources} />
+                    </div>
+                  ))}
+                </>
+              ) : null}
+              {(data.foldNotes as FoldNote[]).map((note) => (
+                <div key={note.title}>
+                  <h3>{note.title}</h3>
+                  <p>{note.body}</p>
+                  {note.unverified ? <Unverified reason={note.unverifiedReason} /> : null}
+                  {note.sources ? <Sources links={note.sources} /> : null}
                 </div>
               ))}
+              {nola ? (
+                <>
+                  <h3>{nola.afterThisTrip.title}</h3>
+                  {nola.afterThisTrip.items.map((item) => (
+                    <div key={item.text}>
+                      <p>{item.text}</p>
+                      <Sources links={item.sources} />
+                    </div>
+                  ))}
+                  <p className="muted">{meta.driveAssumption}</p>
+                </>
+              ) : null}
             </details>
           </div>
         ) : null}
@@ -531,60 +634,80 @@ function BanderaView({ data }: { data: BanderaContent }) {
         {tab === "food" ? (
           <section className="stack-tab" aria-labelledby="food-title">
             <h1 id="food-title">Food</h1>
-            <p>
-              Strict ovo-lacto. Named dishes come from the linked menus. Call to confirm
-              Thanksgiving hours. Never assume a kitchen is open.
-            </p>
+            <p>{meta.foodLead}</p>
             <p className="diet-line">
               {diet.title}. {diet.summary}
             </p>
             {diet.coconutUnverified ? <Unverified reason={diet.coconutUnverifiedReason} /> : null}
             <p>{diet.coconut}</p>
             {foodPicks.map((card) => (
-              <FoodBlock key={card.name} card={card} photo={card.imageId ? photoMap[card.imageId] : undefined} />
+              <FoodBlock
+                key={card.name}
+                card={card}
+                photo={card.imageId ? photoMap[card.imageId] : undefined}
+                hoursWarning={meta.hoursWarning}
+              />
             ))}
-            <FoodBlock
-              card={{
-                rank: 99,
-                name: data.otherFoodNotes.ost.name,
-                blurb: data.otherFoodNotes.ost.detail,
-                address: data.otherFoodNotes.ost.address,
-                hours: data.otherFoodNotes.ost.hours,
-                hoursUnverified: true,
-                dishes: [],
-                ask: [],
-                sources: data.otherFoodNotes.ost.sources,
-                imageId: data.otherFoodNotes.ost.imageId,
-              }}
-              photo={photoMap.ost}
-            />
-            <article className="media-card">
-              <div className="media-card-body">
-                <h3>Weaker leads</h3>
-                <ul className="ask-list">
-                  {data.otherFoodNotes.weaker.map((line) => (
-                    <li key={line}>{line}</li>
-                  ))}
-                </ul>
-                <Unverified reason={data.otherFoodNotes.communityMeals.unverifiedReason} />
-                <p>{data.otherFoodNotes.communityMeals.detail}</p>
-                <Sources links={data.otherFoodNotes.communityMeals.sources} />
-              </div>
-            </article>
+            {bandera ? (
+              <>
+                <FoodBlock
+                  card={{
+                    rank: 99,
+                    name: bandera.otherFoodNotes.ost.name,
+                    blurb: bandera.otherFoodNotes.ost.detail,
+                    address: bandera.otherFoodNotes.ost.address,
+                    hours: bandera.otherFoodNotes.ost.hours,
+                    hoursUnverified: true,
+                    dishes: [],
+                    ask: [],
+                    sources: bandera.otherFoodNotes.ost.sources,
+                    imageId: bandera.otherFoodNotes.ost.imageId,
+                  }}
+                  photo={photoMap.ost}
+                  hoursWarning={meta.hoursWarning}
+                />
+                <article className="media-card">
+                  <div className="media-card-body">
+                    <h3>Weaker leads</h3>
+                    <ul className="ask-list">
+                      {bandera.otherFoodNotes.weaker.map((line) => (
+                        <li key={line}>{line}</li>
+                      ))}
+                    </ul>
+                    <Unverified reason={bandera.otherFoodNotes.communityMeals.unverifiedReason} />
+                    <p>{bandera.otherFoodNotes.communityMeals.detail}</p>
+                    <Sources links={bandera.otherFoodNotes.communityMeals.sources} />
+                  </div>
+                </article>
+              </>
+            ) : null}
+            {nola?.weakerFood ? (
+              <article className="media-card">
+                <div className="media-card-body">
+                  <h3>{nola.weakerFood.title}</h3>
+                  <ul className="ask-list">
+                    {nola.weakerFood.lines.map((line) => (
+                      <li key={line}>{line}</li>
+                    ))}
+                  </ul>
+                  {nola.weakerFood.unverifiedReason ? (
+                    <Unverified reason={nola.weakerFood.unverifiedReason} />
+                  ) : null}
+                  {nola.weakerFood.sources ? <Sources links={nola.weakerFood.sources} /> : null}
+                </div>
+              </article>
+            ) : null}
           </section>
         ) : null}
 
         {tab === "attractions" ? (
           <section className="stack-tab" aria-labelledby="attractions-title">
             <h1 id="attractions-title">Attractions</h1>
-            <p>
-              Real places only. Drives are OSRM no-traffic from Flying L unless noted. Photos are
-              Wikimedia Commons files that allow reuse; places without a reusable photo use a
-              placeholder.
-            </p>
-            {(Object.keys(groupedDrives) as DriveRow["group"][]).map((group) => (
+            <p>{meta.attractionsLead}</p>
+            <p className="muted">{meta.driveAssumption}</p>
+            {(Object.keys(groupedDrives) as DriveGroup[]).map((group) => (
               <div key={group}>
-                <h2>{GROUP_LABEL[group]}</h2>
+                <h2>{groupLabels[group]}</h2>
                 {groupedDrives[group].map((row) => (
                   <AttractionCard
                     key={row.id}
@@ -610,7 +733,7 @@ function BanderaView({ data }: { data: BanderaContent }) {
         {tab === "events" ? (
           <section className="stack-tab" aria-labelledby="events-title">
             <h1 id="events-title">Events</h1>
-            <p>Only Nov 26–29, 2026. Later parades stay in the “after this trip” note.</p>
+            <p>{meta.eventsLead}</p>
             {events.map((event) => (
               <EventCard
                 key={event.id}
@@ -634,14 +757,20 @@ function BanderaView({ data }: { data: BanderaContent }) {
 }
 
 export default function TripPlanner() {
-  const [data, setData] = useState<BanderaContent | null>(null);
+  const [tripId, setTripId] = useState<TripId>(() => readStoredTrip() ?? defaultTripId());
+  const [data, setData] = useState<PlannerData | null>(null);
   const [error, setError] = useState("");
 
   useEffect(() => {
     let cancelled = false;
-    import("./bandera-content")
+    const load =
+      tripId === "nola" ? import("./nola-content") : import("./bandera-content");
+    load
       .then((mod) => {
-        if (!cancelled) setData(mod.content);
+        if (!cancelled) {
+          setData(mod.content);
+          setError("");
+        }
       })
       .catch(() => {
         if (!cancelled) setError("Could not load the trip notes. Try refreshing this tab.");
@@ -649,17 +778,22 @@ export default function TripPlanner() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [tripId]);
 
-  if (error) {
-    return (
-      <main className="trip-loading">
-        <p>{error}</p>
-      </main>
-    );
+  function chooseTrip(next: TripId) {
+    writeStoredTrip(next);
+    setTripId(next);
+    setError("");
   }
 
-  if (!data) {
+  if (!data || data.meta.tripId !== tripId) {
+    if (error) {
+      return (
+        <main className="trip-loading">
+          <p>{error}</p>
+        </main>
+      );
+    }
     return (
       <main className="trip-loading" aria-busy="true">
         <p>Loading trip notes…</p>
@@ -667,5 +801,5 @@ export default function TripPlanner() {
     );
   }
 
-  return <BanderaView data={data} />;
+  return <TripView key={tripId} data={data} tripId={tripId} onTripId={chooseTrip} />;
 }

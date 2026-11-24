@@ -6,7 +6,7 @@ import { FormEvent, useEffect, useRef, useState } from "react";
 
 const TripPlanner = dynamic(() => import("./TripPlanner"));
 
-const ACCESS_PIN = "6002";
+const ACCESS_PINS = new Set(["6002", "3605"]);
 const ACCESS_KEY = "trip-roadbook-unlocked";
 
 export default function PinGate() {
@@ -35,7 +35,7 @@ export default function PinGate() {
   const submitPin = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
-    if (pin === ACCESS_PIN) {
+    if (ACCESS_PINS.has(pin)) {
       try {
         window.sessionStorage.setItem(ACCESS_KEY, "true");
       } catch {
@@ -87,8 +87,8 @@ export default function PinGate() {
         <div className="access-brand">
           <span className="access-brand-mark"><MapPinned aria-hidden="true" /></span>
           <span>
-            <strong>Bandera roadbook</strong>
-            <small>Private trip planner</small>
+            <strong>Trip roadbook</strong>
+            <small>Bandera · New Orleans</small>
           </span>
         </div>
 

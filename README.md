@@ -1,21 +1,23 @@
-# Bandera / Flying L Ranch trip
+# Trip roadbook (Bandera and New Orleans)
 
-Private, PIN-gated trip notes for **Thu Nov 26 to Sun Nov 29, 2026** at Flying L Ranch Resort, Bandera, TX. Served at `https://harsh.bet/trip/` with base path `/trip/`.
+Private, PIN-gated trip notes served at `https://harsh.bet/trip/` with base path `/trip/`. Two trips share the same beige shell:
 
-The page is for the owner. It does not publish a personal name, home address, or personal email/phone. City names only.
+- **Bandera / Flying L Ranch**, Thu Nov 26 to Sun Nov 29, 2026
+- **New Orleans**, Thu Dec 25 to Fri Dec 26, 2026 (Katy, TX start/return via I-10, about 5 hours each way, labeled as an assumption)
+
+The page is for the owner. It does not publish a personal name, home address, or personal email/phone. City names only. Lodging for New Orleans is the owner's booking and is not named.
 
 ## What is on the page
 
-After the existing four-digit PIN gate:
+After the four-digit PIN gate (either code in `app/PinGate.tsx`):
 
+- A Bandera / New Orleans switcher at the top
 - Sticky tabs: Schedule, Food, Attractions, Events
-- A calendar time-grid (hour rail and duration blocks). One day at a time on a phone, four days on a wide screen
+- A calendar time-grid (hour rail and duration blocks). Day view on a phone; Day / all-days toggle on a wide screen
 - Food, attractions, and events cards with reusable Wikimedia Commons photos where a legal photo exists
 - Weather, alerts, drive info, and stay notes inside Schedule
-- Katy, TX start and end, I-10 west through San Antonio, OSRM no-traffic drive times
 - Diet callout: strict ovo-lacto vegetarian, no meat broths, ask about lard / fish sauce / Caesar, coconut flagged
-- Events for Nov 26-29 only
-- An **as of Nov 23, 2026** note on hours and weather
+- Each trip's own data module, lazy-loaded after unlock so `index.html` does not contain itinerary text
 
 Hours, menus, prices, and times are never invented. Every fact keeps its source link. **UNVERIFIED** items stay visible. Prefer calling to confirm, especially Thanksgiving Day.
 
@@ -30,7 +32,7 @@ npm install
 npm run dev
 ```
 
-The PIN is the existing trip PIN in `app/PinGate.tsx`. Trip content loads in a lazily imported chunk only after unlock.
+The PINs are the two four-digit codes in `app/PinGate.tsx`. Trip content (Bandera or New Orleans) loads in a lazily imported chunk only after unlock.
 
 ```bash
 npm test

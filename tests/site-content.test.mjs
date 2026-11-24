@@ -25,7 +25,9 @@ test("keeps the site standalone and Pages-safe", async () => {
   assert.match(layout, /index: false/);
   assert.match(layout, /canonical: "\/trip\/"/);
   assert.match(page, /<PinGate \/>/);
-  assert.match(pinGate, /const ACCESS_PIN = "6002"/);
+  assert.match(pinGate, /"6002"/);
+  assert.match(pinGate, /"3605"/);
+  assert.match(pinGate, /ACCESS_PINS/);
   assert.match(pinGate, /sessionStorage/);
   assert.match(pinGate, /dynamic\(\(\) => import\("\.\/TripPlanner"\)\)/);
   assert.doesNotMatch(page, /_sites-preview|SkeletonPreview/);
@@ -42,11 +44,13 @@ test("keeps noindex/nofollow and does not add a sitemap", async () => {
 });
 
 test("every external link in the content data has an http(s) URL", async () => {
-  const data = await read("app/bandera-content.ts");
-  const hrefs = hrefsFrom(data);
-  assert.ok(hrefs.length >= 50, `expected many source hrefs, got ${hrefs.length}`);
-  for (const href of hrefs) {
-    assert.match(href, /^https?:\/\//, href);
+  for (const file of ["app/bandera-content.ts", "app/nola-content.ts"]) {
+    const data = await read(file);
+    const hrefs = hrefsFrom(data);
+    assert.ok(hrefs.length >= 20, `${file}: expected many source hrefs, got ${hrefs.length}`);
+    for (const href of hrefs) {
+      assert.match(href, /^https?:\/\//, `${file} ${href}`);
+    }
   }
 });
 
@@ -70,15 +74,21 @@ test("PinGate lazy-loads TripPlanner and does not inline trip content", async ()
   const planner = await read("app/TripPlanner.tsx");
   assert.match(pinGate, /dynamic\(\(\) => import\("\.\/TripPlanner"\)\)/);
   assert.doesNotMatch(pinGate, /bandera-content/);
+  assert.doesNotMatch(pinGate, /nola-content/);
   assert.doesNotMatch(pinGate, /Vegetarian Pasta/);
   assert.doesNotMatch(pinGate, /Dickens on Main/);
+  assert.doesNotMatch(pinGate, /Cafe du Monde/);
+  assert.doesNotMatch(pinGate, /Celebration in the Oaks/);
   assert.match(planner, /import\("\.\/bandera-content"\)/);
+  assert.match(planner, /import\("\.\/nola-content"\)/);
 });
 
-test("lock screen is rethemed for Bandera, not NM", async () => {
+test("lock screen is rethemed for the trip roadbook, not NM", async () => {
   const pinGate = await read("app/PinGate.tsx");
   assert.match(pinGate, />TX</);
-  assert.match(pinGate, /Bandera roadbook/);
+  assert.match(pinGate, /Trip roadbook/);
+  assert.match(pinGate, /Bandera/);
+  assert.match(pinGate, /New Orleans/);
   assert.doesNotMatch(pinGate, />NM</);
   assert.doesNotMatch(pinGate, /New Mexico Roadbook/);
 });
@@ -176,7 +186,7 @@ test("renders sticky tabs and a calendar time-grid without filter chips", async 
   assert.match(planner, /day-switcher/);
   assert.match(planner, /span-toggle/);
   assert.match(planner, /chooseSpan\("day"\)/);
-  assert.match(planner, /4 days/);
+  assert.match(planner, /spanAllLabel/);
   assert.match(planner, /trip-schedule-span/);
   assert.match(planner, /America\/Chicago/);
   assert.match(planner, /2026-11-26/);
@@ -227,14 +237,102 @@ test("keeps reusable Wikimedia photos on disk with credits and lists photo gaps"
 });
 
 test("does not put the owner's name or personal contact on the page", async () => {
-  const [data, planner, pinGate, layout] = await Promise.all([
+  const [data, nola, planner, pinGate, layout] = await Promise.all([
     read("app/bandera-content.ts"),
+    read("app/nola-content.ts"),
     read("app/TripPlanner.tsx"),
     read("app/PinGate.tsx"),
     read("app/layout.tsx"),
   ]);
-  const joined = `${data}\n${planner}\n${pinGate}\n${layout}`;
+  const joined = `${data}\n${nola}\n${planner}\n${pinGate}\n${layout}`;
   assert.doesNotMatch(joined, /Harsh Dave/);
   assert.doesNotMatch(joined, /\bBoss\b/);
   assert.doesNotMatch(joined, /@gmail\.com/);
+});
+
+test("accepts either trip PIN", async () => {
+  const pinGate = await read("app/PinGate.tsx");
+  assert.match(pinGate, /ACCESS_PINS = new Set\(\["6002", "3605"\]\)/);
+  assert.match(pinGate, /ACCESS_PINS\.has\(pin\)/);
+});
+
+test("has a Bandera / New Orleans switcher and a Day / all-days toggle", async () => {
+  const [planner, nola, bandera] = await Promise.all([
+    read("app/TripPlanner.tsx"),
+    read("app/nola-content.ts"),
+    read("app/bandera-content.ts"),
+  ]);
+  assert.match(planner, /trip-switcher/);
+  assert.match(planner, /New Orleans/);
+  assert.match(planner, /onTripId\("nola"\)/);
+  assert.match(planner, /onTripId\("bandera"\)/);
+  assert.match(planner, /chooseSpan\("day"\)/);
+  assert.match(bandera, /spanAllLabel: "4 days"/);
+  assert.match(nola, /spanAllLabel: "All days"/);
+  assert.match(nola, /2026-12-25/);
+  assert.match(nola, /2026-12-26/);
+});
+
+test("encodes the NOLA stay, Katy drive assumption, vegetarian food, and Christmas closures", async () => {
+  const data = await read("app/nola-content.ts");
+  assert.match(data, /New Orleans/);
+  assert.match(data, /Thu Dec 25 to Fri Dec 26, 2026/);
+  assert.match(data, /originCity: "Katy, TX"/);
+  assert.match(data, /about 5 hours each way via I-10/);
+  assert.match(data, /7 hours 2 minutes/);
+  assert.match(data, /Strict ovo-lacto vegetarian/);
+  assert.match(data, /Cafe du Monde/);
+  assert.match(data, /closed only on Christmas Day|Closed Christmas Day/);
+  assert.match(data, /2 Phat Vegans/);
+  assert.match(data, /Killer PoBoys/);
+  assert.match(data, /Sweet Soulfood/);
+  assert.match(data, /Satsuma/);
+  assert.match(data, /Cajun Pride/);
+  assert.match(data, /closed Christmas Day/);
+  assert.match(data, /Jean Lafitte/);
+  assert.match(data, /not valid Christmas Day/);
+  assert.match(data, /Honey Island/);
+  assert.match(data, /Steamboat Natchez/);
+  assert.match(data, /Creole Queen/);
+  assert.match(data, /Celebration in the Oaks/);
+  assert.match(data, /Christmas Hours: 5 PM–10 PM|Christmas Hours 5/);
+  assert.match(data, /Snug Harbor/);
+  assert.match(data, /Frenchmen Street/);
+  assert.match(data, /St\. Charles/);
+  assert.match(data, /St\. Louis Cathedral/);
+  assert.match(data, /Réveillon|Reveillon/);
+  assert.match(data, /bonfires/);
+  assert.match(data, /ovo-lacto/);
+  assert.match(data, /no hotel is named|does not name a hotel/);
+});
+
+test("notes Groupon listings without inventing Christmas sailings", async () => {
+  const data = await read("app/nola-content.ts");
+  assert.match(data, /groupon.com\/deals\/jean-lafitte-tours-4/);
+  assert.match(data, /\$23 \(from \$32\)/);
+  assert.match(data, /groupon.com\/deals\/steamboat-natchez-1/);
+  assert.match(data, /\$38\.15/);
+  assert.match(data, /groupon.com\/deals\/gl-cajun-pride-swamp-tours-1/);
+  assert.match(data, /\$39\.99/);
+  assert.match(data, /groupon.com\/deals\/creole-queen-5-new-orleans/);
+  assert.match(data, /No Honey Island \/ Cajun Encounters Groupon was listed/);
+});
+
+test("keeps reusable NOLA Wikimedia photos on disk with credits", async () => {
+  const data = await read("app/nola-content.ts");
+  assert.match(data, /\/images\/jackson-square\.webp/);
+  assert.match(data, /\/images\/cafe-du-monde\.webp/);
+  assert.match(data, /\/images\/steamboat-natchez\.webp/);
+  assert.match(data, /\/images\/st-charles-streetcar\.webp/);
+  assert.match(data, /\/images\/garden-district\.webp/);
+  assert.match(data, /\/images\/frenchmen-street\.webp/);
+  assert.match(data, /\/images\/celebration-oaks\.webp/);
+  assert.match(data, /\/images\/city-park\.webp/);
+  assert.match(data, /\/images\/honey-island\.webp/);
+  assert.match(data, /Infrogmation of New Orleans/);
+  assert.match(data, /CC BY-SA 4\.0/);
+  await access(new URL("public/images/jackson-square.webp", root));
+  await access(new URL("public/images/cafe-du-monde.webp", root));
+  await access(new URL("public/images/celebration-oaks.webp", root));
+  await access(new URL("public/images/honey-island.webp", root));
 });
