@@ -3,26 +3,31 @@
 import dynamic from "next/dynamic";
 import { ArrowRight, LockKeyhole, MapPinned, ShieldCheck } from "lucide-react";
 import { FormEvent, useEffect, useRef, useState } from "react";
+import type { TripId } from "./trip-types";
 
 const TripPlanner = dynamic(() => import("./TripPlanner"));
 
-const ACCESS_PINS = new Set(["6002", "3605"]);
+const PIN_TRIPS: Record<string, TripId> = { "6002": "bandera", "3605": "nola" };
 const ACCESS_KEY = "trip-roadbook-unlocked";
 
+function asTripId(value: string | null): TripId | null {
+  return value === "bandera" || value === "nola" ? value : null;
+}
+
 export default function PinGate() {
-  const [isUnlocked, setIsUnlocked] = useState(false);
+  const [unlockedTrip, setUnlockedTrip] = useState<TripId | null>(null);
   const [pin, setPin] = useState("");
   const [error, setError] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    let unlocked = false;
+    let unlocked: TripId | null = null;
     try {
-      unlocked = window.sessionStorage.getItem(ACCESS_KEY) === "true";
+      unlocked = asTripId(window.sessionStorage.getItem(ACCESS_KEY));
     } catch {
       // The PIN still works when a browser blocks session storage.
     }
-    queueMicrotask(() => setIsUnlocked(unlocked));
+    queueMicrotask(() => setUnlockedTrip(unlocked));
 
     if (!unlocked) {
       document.body.classList.add("access-locked");
@@ -35,15 +40,16 @@ export default function PinGate() {
   const submitPin = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
-    if (ACCESS_PINS.has(pin)) {
+    const trip = PIN_TRIPS[pin];
+    if (trip) {
       try {
-        window.sessionStorage.setItem(ACCESS_KEY, "true");
+        window.sessionStorage.setItem(ACCESS_KEY, trip);
       } catch {
         // Keep access for this render even when session storage is unavailable.
       }
       document.body.classList.remove("access-locked");
       setError("");
-      setIsUnlocked(true);
+      setUnlockedTrip(trip);
       return;
     }
 
@@ -52,7 +58,7 @@ export default function PinGate() {
     requestAnimationFrame(() => inputRef.current?.focus());
   };
 
-  if (isUnlocked) return <TripPlanner />;
+  if (unlockedTrip) return <TripPlanner tripId={unlockedTrip} />;
 
   return (
     <main className="access-page">
@@ -88,7 +94,7 @@ export default function PinGate() {
           <span className="access-brand-mark"><MapPinned aria-hidden="true" /></span>
           <span>
             <strong>Trip roadbook</strong>
-            <small>Bandera · New Orleans</small>
+            <small>Private trip notes</small>
           </span>
         </div>
 

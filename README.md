@@ -11,7 +11,7 @@ The page is for the owner. It does not publish a personal name, home address, or
 
 After the four-digit PIN gate (either code in `app/PinGate.tsx`):
 
-- A Bandera / New Orleans switcher at the top
+- Each trip has its own PIN; a PIN opens only that trip
 - Sticky tabs: Schedule, Food, Attractions, Events
 - A calendar time-grid (hour rail and duration blocks). Day view on a phone; Day / all-days toggle on a wide screen
 - Food, attractions, and events cards with reusable Wikimedia Commons photos where a legal photo exists

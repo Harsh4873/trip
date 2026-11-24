@@ -27,7 +27,7 @@ test("keeps the site standalone and Pages-safe", async () => {
   assert.match(page, /<PinGate \/>/);
   assert.match(pinGate, /"6002"/);
   assert.match(pinGate, /"3605"/);
-  assert.match(pinGate, /ACCESS_PINS/);
+  assert.match(pinGate, /PIN_TRIPS/);
   assert.match(pinGate, /sessionStorage/);
   assert.match(pinGate, /dynamic\(\(\) => import\("\.\/TripPlanner"\)\)/);
   assert.doesNotMatch(page, /_sites-preview|SkeletonPreview/);
@@ -250,22 +250,21 @@ test("does not put the owner's name or personal contact on the page", async () =
   assert.doesNotMatch(joined, /@gmail\.com/);
 });
 
-test("accepts either trip PIN", async () => {
-  const pinGate = await read("app/PinGate.tsx");
-  assert.match(pinGate, /ACCESS_PINS = new Set\(\["6002", "3605"\]\)/);
-  assert.match(pinGate, /ACCESS_PINS\.has\(pin\)/);
+test("each PIN opens only its own trip", async () => {
+  const [pinGate, planner] = await Promise.all([read("app/PinGate.tsx"), read("app/TripPlanner.tsx")]);
+  assert.match(pinGate, /"6002": "bandera"/);
+  assert.match(pinGate, /"3605": "nola"/);
+  assert.match(pinGate, /<TripPlanner tripId=\{unlockedTrip\} \/>/);
+  assert.doesNotMatch(planner, /trip-switcher|onTripId|trip-roadbook-selected/);
 });
 
-test("has a Bandera / New Orleans switcher and a Day / all-days toggle", async () => {
+test("has a Day / all-days toggle for both trips", async () => {
   const [planner, nola, bandera] = await Promise.all([
     read("app/TripPlanner.tsx"),
     read("app/nola-content.ts"),
     read("app/bandera-content.ts"),
   ]);
-  assert.match(planner, /trip-switcher/);
   assert.match(planner, /New Orleans/);
-  assert.match(planner, /onTripId\("nola"\)/);
-  assert.match(planner, /onTripId\("bandera"\)/);
   assert.match(planner, /chooseSpan\("day"\)/);
   assert.match(bandera, /spanAllLabel: "4 days"/);
   assert.match(nola, /spanAllLabel: "All days"/);

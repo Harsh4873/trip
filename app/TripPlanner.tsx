@@ -25,7 +25,6 @@ type ScheduleSpan = "day" | "week";
 type PlannerData = BanderaContent | NolaContent;
 
 const SPAN_KEY = "trip-schedule-span";
-const TRIP_KEY = "trip-roadbook-selected";
 const BANDERA_YMD: Record<string, string> = {
   "2026-11-26": "thu",
   "2026-11-27": "fri",
@@ -56,33 +55,6 @@ function defaultScheduleSpan(tripId: TripId, now = new Date()): ScheduleSpan {
 
 function defaultDayId(tripId: TripId, fallback: string, now = new Date()): string {
   return ymdMapFor(tripId)[chicagoYmd(now)] ?? fallback;
-}
-
-function defaultTripId(now = new Date()): TripId {
-  const ymd = chicagoYmd(now);
-  if (NOLA_YMD[ymd]) return "nola";
-  if (BANDERA_YMD[ymd]) return "bandera";
-  return "bandera";
-}
-
-function readStoredTrip(): TripId | null {
-  if (typeof window === "undefined") return null;
-  try {
-    const stored = window.sessionStorage.getItem(TRIP_KEY);
-    if (stored === "bandera" || stored === "nola") return stored;
-  } catch {
-    return null;
-  }
-  return null;
-}
-
-function writeStoredTrip(tripId: TripId) {
-  if (typeof window === "undefined") return;
-  try {
-    window.sessionStorage.setItem(TRIP_KEY, tripId);
-  } catch {
-    /* ignore quota / private mode */
-  }
 }
 
 function readStoredSpan(): ScheduleSpan | null {
@@ -353,11 +325,9 @@ function EventCard({ event, photo }: { event: TripEvent; photo?: PlacePhoto }) {
 function TripView({
   data,
   tripId,
-  onTripId,
 }: {
   data: TripContent;
   tripId: TripId;
-  onTripId: (id: TripId) => void;
 }) {
   const { meta, weather, diet, days, foodPicks, events, drives, alerts, photos, photoGaps } = data;
   const photoMap = useMemo(
@@ -411,26 +381,6 @@ function TripView({
       </a>
 
       <header className="chrome">
-        <div className="trip-switcher" role="tablist" aria-label="Trip">
-          <button
-            type="button"
-            role="tab"
-            aria-selected={tripId === "bandera"}
-            className={tripId === "bandera" ? "is-active" : ""}
-            onClick={() => onTripId("bandera")}
-          >
-            Bandera
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={tripId === "nola"}
-            className={tripId === "nola" ? "is-active" : ""}
-            onClick={() => onTripId("nola")}
-          >
-            New Orleans
-          </button>
-        </div>
         <div className="brand">
           <strong>{meta.stayName}</strong>
           <span>{meta.dates}</span>
@@ -756,8 +706,7 @@ function TripView({
   );
 }
 
-export default function TripPlanner() {
-  const [tripId, setTripId] = useState<TripId>(() => readStoredTrip() ?? defaultTripId());
+export default function TripPlanner({ tripId }: { tripId: TripId }) {
   const [data, setData] = useState<PlannerData | null>(null);
   const [error, setError] = useState("");
 
@@ -780,12 +729,6 @@ export default function TripPlanner() {
     };
   }, [tripId]);
 
-  function chooseTrip(next: TripId) {
-    writeStoredTrip(next);
-    setTripId(next);
-    setError("");
-  }
-
   if (!data || data.meta.tripId !== tripId) {
     if (error) {
       return (
@@ -801,5 +744,5 @@ export default function TripPlanner() {
     );
   }
 
-  return <TripView key={tripId} data={data} tripId={tripId} onTripId={chooseTrip} />;
+  return <TripView key={tripId} data={data} tripId={tripId} />;
 }
